@@ -29,7 +29,7 @@ Mekanism 10.7.x is explicitly recognized as a safe custom ore generator. Its nor
 ## Installing
 
 1. Back up the world.
-2. Put `ore_renewal-1.0.1.jar` in the server's `mods` folder.
+2. Put `ore_renewal-1.0.2.jar` in the server's `mods` folder.
 3. Start the world. A new world only establishes its baseline; an established world also starts conservative historical recovery.
 4. Add future ore-producing mods or datapacks normally. Their new features are detected automatically on the next start.
 5. Existing chunks are processed as they load.
@@ -59,7 +59,7 @@ The server config is `config/ore_renewal-server.toml`.
 - `enabled`: pauses or resumes processing without losing history.
 - `bootstrap_established_worlds`: enables the one-time conservative historical recovery when Ore Renewal is first added to an established world.
 - `chunks_per_tick`: processing throttle; default `1`.
-- `only_when_tick_has_time`: avoids adding work to an already busy tick.
+- `only_when_tick_has_time`: prefers spare tick time, with a one-chunk fallback after 20 deferred ticks so a busy server cannot permanently starve the queue.
 - `include_nonstandard_underground_features`: opt in to custom features that are not standard ore generators.
 - `additional_safe_ore_features`: exact standard-generator feature IDs whose output is genuinely an ore despite lacking an ore tag/name.
 - `log_every_n_chunks`: progress log interval; `0` disables progress lines.

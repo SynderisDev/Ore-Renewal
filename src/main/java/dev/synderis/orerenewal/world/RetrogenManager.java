@@ -32,13 +32,11 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class RetrogenManager {
     private static final int NEW_CHUNK_SENTINEL = -1;
-    private final ConcurrentLinkedQueue<ChunkKey> queue = new ConcurrentLinkedQueue<>();
-    private final Set<ChunkKey> queued = ConcurrentHashMap.newKeySet();
+    private final PriorityDeduplicatingQueue<ChunkKey> queue = new PriorityDeduplicatingQueue<>();
     private final Set<ChunkKey> loaded = ConcurrentHashMap.newKeySet();
     private final Map<ResourceKey<Level>, Map<ResourceLocation, Integer>> currentFeatures = new ConcurrentHashMap<>();
     private final AtomicLong processedChunks = new AtomicLong();
@@ -46,6 +44,7 @@ public final class RetrogenManager {
     private final AtomicLong successfulPlacements = new AtomicLong();
     private final AtomicLong skippedExistingFeatures = new AtomicLong();
     private final AtomicLong failedFeatureRuns = new AtomicLong();
+    private final RetrogenTickThrottle tickThrottle = new RetrogenTickThrottle(20);
     private volatile boolean profilesReady;
     private volatile boolean existingChunkLoadedBeforeProfiles;
 
@@ -62,6 +61,7 @@ public final class RetrogenManager {
         successfulPlacements.set(0);
         skippedExistingFeatures.set(0);
         failedFeatureRuns.set(0);
+        tickThrottle.reset();
 
         for (ServerLevel level : event.getServer().getAllLevels()) {
             Map<ResourceLocation, Integer> discovered = OreFeatureDiscovery.discover(level);
@@ -103,10 +103,10 @@ public final class RetrogenManager {
     public void onServerStopped(ServerStoppedEvent event) {
         profilesReady = false;
         queue.clear();
-        queued.clear();
         loaded.clear();
         currentFeatures.clear();
         existingChunkLoadedBeforeProfiles = false;
+        tickThrottle.reset();
     }
 
     public void onChunkLoad(ChunkEvent.Load event) {
@@ -141,17 +141,18 @@ public final class RetrogenManager {
         if (!profilesReady || !OreRenewalConfig.ENABLED.get()) {
             return;
         }
-        if (OreRenewalConfig.ONLY_WHEN_TICK_HAS_TIME.get() && !event.hasTime()) {
+        int budget = tickThrottle.budget(
+                event.hasTime(),
+                OreRenewalConfig.ONLY_WHEN_TICK_HAS_TIME.get(),
+                OreRenewalConfig.CHUNKS_PER_TICK.get());
+        if (budget == 0) {
             return;
         }
-
-        int budget = OreRenewalConfig.CHUNKS_PER_TICK.get();
         for (int i = 0; i < budget; i++) {
             ChunkKey key = queue.poll();
             if (key == null) {
                 break;
             }
-            queued.remove(key);
             process(event.getServer(), key);
         }
     }
@@ -206,7 +207,7 @@ public final class RetrogenManager {
             OreRenewal.LOGGER.info(
                     "Ore Renewal processed {} chunks this session ({} feature runs, {} successful placements, {} historical features already present, {} failures, {} queued)",
                     processed, featureRuns.get(), successfulPlacements.get(), skippedExistingFeatures.get(),
-                    failedFeatureRuns.get(), queued.size());
+                    failedFeatureRuns.get(), queue.size());
         }
     }
 
@@ -282,9 +283,7 @@ public final class RetrogenManager {
     }
 
     private void enqueue(ChunkKey key) {
-        if (queued.add(key)) {
-            queue.add(key);
-        }
+        queue.offer(key);
     }
 
     private void enqueueAllLoaded() {
@@ -314,7 +313,7 @@ public final class RetrogenManager {
                         center.dimension(),
                         ChunkPos.asLong(pos.x + offsetX, pos.z + offsetZ));
                 if (loaded.contains(neighbor)) {
-                    enqueue(neighbor);
+                    queue.offerPriority(neighbor);
                 }
             }
         }
@@ -380,7 +379,7 @@ public final class RetrogenManager {
     }
 
     public long queuedChunkCount() {
-        return queued.size();
+        return queue.size();
     }
 
     public long processedChunkCount() {

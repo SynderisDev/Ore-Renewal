@@ -33,7 +33,9 @@ public final class OreRenewalConfig {
                 .comment("Maximum existing chunks processed per server tick. Keep this low on large modpacks.")
                 .defineInRange("chunks_per_tick", 1, 1, 64);
         ONLY_WHEN_TICK_HAS_TIME = builder
-                .comment("Skip retrogen work when the server reports that the current tick is already busy.")
+                .comment(
+                        "Prefer retrogen work only when the server reports spare tick time.",
+                        "To prevent permanent queue starvation, one chunk is still attempted after 20 deferred ticks.")
                 .define("only_when_tick_has_time", true);
         INCLUDE_NONSTANDARD_UNDERGROUND_FEATURES = builder
                 .comment(
