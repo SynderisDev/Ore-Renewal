@@ -4,14 +4,15 @@ Ore Renewal is a server-side NeoForge mod for Minecraft 1.21.1. It detects newly
 
 ## How it stays safe
 
-- The first launch in each world/dimension records a baseline and does not generate anything.
+- The first launch records a baseline. A new world generates nothing extra.
+- In an established world, the first launch conservatively queues the already-installed non-vanilla ore features. Per chunk, an old feature is skipped when its ore is already present.
 - Later launches compare the current underground-ore feature IDs with that baseline.
 - Every addition becomes a persistent world migration.
 - New chunks are marked at generation time and never receive duplicate retro-generation.
 - Existing chunks remember the last migration they completed.
 - Work is throttled to one chunk per tick by default.
 
-By default the mod recognizes standard `ORE` and `SCATTERED_ORE` configured features in every generation step. Checking every step is important because vanilla-style Nether ores use `UNDERGROUND_DECORATION`, not `UNDERGROUND_ORES`. Each feature retains its normal placement modifiers, biome filter, height, rarity, dimensions, target blocks, and biome restrictions.
+By default the mod recognizes standard `ORE` and `SCATTERED_ORE` configured features in every generation step, but only when their output block is tagged or named as an ore. The output check excludes terrain packs that reuse the ore-shaped generator for ordinary sand, stone, tuff, calcite, or similar geology. Checking every generation step is important because vanilla-style Nether ores use `UNDERGROUND_DECORATION`, not `UNDERGROUND_ORES`. Each feature retains its normal placement modifiers, biome filter, height, rarity, dimensions, target blocks, and biome restrictions.
 
 ## Existing-build safety
 
@@ -28,9 +29,9 @@ Mekanism 10.7.x is explicitly recognized as a safe custom ore generator. Its nor
 ## Installing
 
 1. Back up the world.
-2. Put `ore_renewal-1.0.0.jar` in the server's `mods` folder.
-3. Start the world once to establish the baseline.
-4. Stop the server, add the new ore-producing mod or datapack, and start it again.
+2. Put `ore_renewal-1.0.1.jar` in the server's `mods` folder.
+3. Start the world. A new world only establishes its baseline; an established world also starts conservative historical recovery.
+4. Add future ore-producing mods or datapacks normally. Their new features are detected automatically on the next start.
 5. Existing chunks are processed as they load.
 
 No client-side installation is required.
@@ -45,14 +46,22 @@ The first scan cannot know which features existed before Ore Renewal was install
 
 Command suggestions list the detected underground-ore placed features. This creates an explicit migration for that feature. Use `/ore_renewal status` to see queue and revision information.
 
+If several ore mods were already added before Ore Renewal established its baseline, `/ore_renewal apply-all-modded` creates a conservative historical migration from every detected non-vanilla ore feature. Per chunk, it skips an old feature when a block produced by that feature is already present. This helps mixed-age worlds avoid a second pass of ores in chunks where that mod already generated.
+
+Minecraft does not retain a per-chunk list of the mods that originally generated it. A mined-out ore therefore looks the same as an ore that was never present, and a feature that happened to generate no ore in a particular chunk cannot be distinguished perfectly. The conservative scan is the safest available inference for a world whose mod history predates Ore Renewal; normal future migrations use exact persisted revision history.
+
+Operators can run `/ore_renewal checkpoint` to flush the current migration progress and affected chunks to disk immediately.
+
 ## Configuration
 
 The server config is `config/ore_renewal-server.toml`.
 
 - `enabled`: pauses or resumes processing without losing history.
+- `bootstrap_established_worlds`: enables the one-time conservative historical recovery when Ore Renewal is first added to an established world.
 - `chunks_per_tick`: processing throttle; default `1`.
 - `only_when_tick_has_time`: avoids adding work to an already busy tick.
 - `include_nonstandard_underground_features`: opt in to custom features that are not standard ore generators.
+- `additional_safe_ore_features`: exact standard-generator feature IDs whose output is genuinely an ore despite lacking an ore tag/name.
 - `log_every_n_chunks`: progress log interval; `0` disables progress lines.
 
 ## Limitations
