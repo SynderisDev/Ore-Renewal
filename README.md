@@ -38,13 +38,22 @@ No client-side installation is required.
 
 ## If the new ores were added at the same time
 
-The first scan cannot know which features existed before Ore Renewal was installed. In that case, run:
+Established-world bootstrap normally handles ore mods that are already installed on Ore Renewal's first launch. If bootstrap was disabled, or the world already recorded its baseline without those ores being migrated, apply the affected placed features manually.
+
+For example, if Mystical Agriculture's Inferium and Prosperity ores need to be applied:
 
 ```text
-/ore_renewal apply namespace:placed_feature_id
+/ore_renewal apply mysticalagriculture:inferium_ore
+/ore_renewal apply mysticalagriculture:prosperity_ore
 ```
 
-Command suggestions list the detected underground-ore placed features. This creates an explicit migration for that feature. Use `/ore_renewal status` to see queue and revision information.
+For an End-specific example from Draconic Evolution:
+
+```text
+/ore_renewal apply draconicevolution:end_draconium_ore
+```
+
+These values are placed-feature IDs, not mod filenames or block IDs. After typing `/ore_renewal apply `, press Tab to list the features Ore Renewal actually detected in the installed pack. Each command creates an explicit migration for that feature. Use `/ore_renewal status` to see queue and revision information.
 
 If several ore mods were already added before Ore Renewal established its baseline, `/ore_renewal apply-all-modded` creates a conservative historical migration from every detected non-vanilla ore feature. Per chunk, it skips an old feature when a block produced by that feature is already present. This helps mixed-age worlds avoid a second pass of ores in chunks where that mod already generated.
 
