@@ -10,21 +10,23 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
 
 public final class OreProfileSavedData extends SavedData {
     private static final String DATA_NAME = "ore_renewal_profile";
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private static final SavedData.Factory<OreProfileSavedData> FACTORY =
             new SavedData.Factory<>(OreProfileSavedData::new, OreProfileSavedData::load);
 
     private boolean initialized;
     private int revision;
     private final Set<ResourceLocation> knownFeatures = new LinkedHashSet<>();
-    private final NavigableMap<Integer, Set<ResourceLocation>> additions = new TreeMap<>();
+    private final NavigableMap<Integer, Migration> additions = new TreeMap<>();
 
     public static OreProfileSavedData get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
@@ -44,7 +46,9 @@ public final class OreProfileSavedData extends SavedData {
                 Set<ResourceLocation> features = new LinkedHashSet<>();
                 readLocations(migration.getList("Features", Tag.TAG_STRING), features);
                 if (!features.isEmpty()) {
-                    data.additions.put(migrationRevision, features);
+                    data.additions.put(
+                            migrationRevision,
+                            new Migration(features, migration.getBoolean("SkipIfPresent")));
                 }
             }
         }
@@ -68,10 +72,11 @@ public final class OreProfileSavedData extends SavedData {
         tag.put("KnownFeatures", writeLocations(knownFeatures));
 
         ListTag migrations = new ListTag();
-        additions.forEach((migrationRevision, features) -> {
+        additions.forEach((migrationRevision, migrationData) -> {
             CompoundTag migration = new CompoundTag();
             migration.putInt("Revision", migrationRevision);
-            migration.put("Features", writeLocations(features));
+            migration.put("Features", writeLocations(migrationData.features()));
+            migration.putBoolean("SkipIfPresent", migrationData.skipIfPresent());
             migrations.add(migration);
         });
         tag.put("Additions", migrations);
@@ -105,7 +110,7 @@ public final class OreProfileSavedData extends SavedData {
 
         if (!added.isEmpty()) {
             revision++;
-            additions.put(revision, Collections.unmodifiableSet(new LinkedHashSet<>(added)));
+            additions.put(revision, migration(added, false));
         }
         if (!added.isEmpty() || !removed.isEmpty()) {
             knownFeatures.clear();
@@ -116,21 +121,36 @@ public final class OreProfileSavedData extends SavedData {
     }
 
     public int forceMigration(Set<ResourceLocation> features) {
+        return forceMigration(features, false);
+    }
+
+    public int forceHistoricalMigration(Set<ResourceLocation> features) {
+        return forceMigration(features, true);
+    }
+
+    private int forceMigration(Set<ResourceLocation> features, boolean skipIfPresent) {
         if (features.isEmpty()) {
             return revision;
         }
         revision++;
-        Set<ResourceLocation> copy = Collections.unmodifiableSet(new LinkedHashSet<>(features));
-        additions.put(revision, copy);
-        knownFeatures.addAll(copy);
+        Migration migration = migration(features, skipIfPresent);
+        additions.put(revision, migration);
+        knownFeatures.addAll(migration.features());
         initialized = true;
         setDirty();
         return revision;
     }
 
-    public Set<ResourceLocation> pendingFeaturesAfter(int completedRevision) {
-        Set<ResourceLocation> pending = new LinkedHashSet<>();
-        additions.tailMap(completedRevision, false).values().forEach(pending::addAll);
+    private static Migration migration(Set<ResourceLocation> features, boolean skipIfPresent) {
+        Set<ResourceLocation> copy = Collections.unmodifiableSet(new LinkedHashSet<>(features));
+        return new Migration(copy, skipIfPresent);
+    }
+
+    public Map<ResourceLocation, Boolean> pendingFeaturesAfter(int completedRevision) {
+        Map<ResourceLocation, Boolean> pending = new LinkedHashMap<>();
+        additions.tailMap(completedRevision, false).values().forEach(migration ->
+                migration.features().forEach(feature ->
+                        pending.merge(feature, migration.skipIfPresent(), (first, second) -> first && second)));
         return pending;
     }
 
@@ -152,5 +172,8 @@ public final class OreProfileSavedData extends SavedData {
             Set<ResourceLocation> removed,
             int revision
     ) {
+    }
+
+    private record Migration(Set<ResourceLocation> features, boolean skipIfPresent) {
     }
 }

@@ -27,6 +27,10 @@ public final class OreRenewalCommands {
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("status")
                         .executes(context -> status(context.getSource())))
+                .then(Commands.literal("checkpoint")
+                        .executes(context -> checkpoint(context.getSource())))
+                .then(Commands.literal("apply-all-modded")
+                        .executes(context -> applyAllModded(context.getSource())))
                 .then(Commands.literal("apply")
                         .then(Commands.argument("feature", ResourceLocationArgument.id())
                                 .suggests((context, builder) ->
@@ -52,6 +56,39 @@ public final class OreRenewalCommands {
                             + status.migrations() + " migrations."), false);
         }
         return 1;
+    }
+
+    private static int checkpoint(CommandSourceStack source) {
+        boolean saved = source.getServer().saveEverything(true, true, true);
+        if (!saved) {
+            source.sendFailure(Component.literal("Ore Renewal could not create a world checkpoint."));
+            return 0;
+        }
+
+        String summary = "Ore Renewal checkpoint saved: "
+                + OreRenewal.RETROGEN.processedChunkCount() + " chunks processed, "
+                + OreRenewal.RETROGEN.queuedChunkCount() + " chunks queued, "
+                + OreRenewal.RETROGEN.featureRunCount() + " feature runs, "
+                + OreRenewal.RETROGEN.successfulPlacementCount() + " successful placements, "
+                + OreRenewal.RETROGEN.skippedExistingFeatureCount()
+                + " historical features skipped because their ore was already present.";
+        OreRenewal.LOGGER.info(summary);
+        source.sendSuccess(() -> Component.literal(summary), true);
+        return 1;
+    }
+
+    private static int applyAllModded(CommandSourceStack source) {
+        int featureDimensions = OreRenewal.RETROGEN.forceModdedFeatures(source.getServer());
+        if (featureDimensions == 0) {
+            source.sendFailure(Component.literal(
+                    "No detected non-vanilla ore features are available in the loaded dimensions."));
+            return 0;
+        }
+
+        source.sendSuccess(() -> Component.literal(
+                "Queued all detected non-vanilla ore features across "
+                        + featureDimensions + " dimension-feature pair(s)."), true);
+        return featureDimensions;
     }
 
     private static int apply(CommandSourceStack source, ResourceLocation featureId) {

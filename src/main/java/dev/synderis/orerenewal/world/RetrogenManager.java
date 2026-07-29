@@ -44,15 +44,23 @@ public final class RetrogenManager {
     private final AtomicLong processedChunks = new AtomicLong();
     private final AtomicLong featureRuns = new AtomicLong();
     private final AtomicLong successfulPlacements = new AtomicLong();
+    private final AtomicLong skippedExistingFeatures = new AtomicLong();
     private final AtomicLong failedFeatureRuns = new AtomicLong();
     private volatile boolean profilesReady;
+    private volatile boolean existingChunkLoadedBeforeProfiles;
 
     public void onServerStarted(ServerStartedEvent event) {
+        boolean establishedWorld = existingChunkLoadedBeforeProfiles
+                || event.getServer().overworld().getGameTime() > 1_200L;
+        boolean bootstrapHistorical = establishedWorld
+                && OreRenewalConfig.BOOTSTRAP_ESTABLISHED_WORLDS.get();
+        existingChunkLoadedBeforeProfiles = false;
         profilesReady = false;
         currentFeatures.clear();
         processedChunks.set(0);
         featureRuns.set(0);
         successfulPlacements.set(0);
+        skippedExistingFeatures.set(0);
         failedFeatureRuns.set(0);
 
         for (ServerLevel level : event.getServer().getAllLevels()) {
@@ -65,6 +73,15 @@ public final class RetrogenManager {
                 OreRenewal.LOGGER.info(
                         "Created Ore Renewal baseline for {} with {} underground ore features",
                         level.dimension().location(), discovered.size());
+                if (bootstrapHistorical) {
+                    Set<ResourceLocation> modded = moddedFeatures(discovered);
+                    if (!modded.isEmpty()) {
+                        profile.forceHistoricalMigration(modded);
+                        OreRenewal.LOGGER.info(
+                                "Established-world bootstrap for {} conservatively adds: {}",
+                                level.dimension().location(), formatIds(modded));
+                    }
+                }
             } else {
                 if (!result.added().isEmpty()) {
                     OreRenewal.LOGGER.info(
@@ -89,6 +106,7 @@ public final class RetrogenManager {
         queued.clear();
         loaded.clear();
         currentFeatures.clear();
+        existingChunkLoadedBeforeProfiles = false;
     }
 
     public void onChunkLoad(ChunkEvent.Load event) {
@@ -103,6 +121,8 @@ public final class RetrogenManager {
         if (event.isNewChunk()) {
             chunk.setData(ModAttachments.CHUNK_REVISION, NEW_CHUNK_SENTINEL);
             chunk.setUnsaved(true);
+        } else if (!profilesReady) {
+            existingChunkLoadedBeforeProfiles = true;
         }
         if (profilesReady) {
             enqueueLoadedNeighborhood(key);
@@ -165,16 +185,17 @@ public final class RetrogenManager {
         }
 
         Map<ResourceLocation, Integer> available = currentFeatures.getOrDefault(level.dimension(), Map.of());
-        Set<ResourceLocation> pending = profile.pendingFeaturesAfter(completedRevision);
-        pending.retainAll(available.keySet());
+        Map<ResourceLocation, Boolean> pending = profile.pendingFeaturesAfter(completedRevision);
+        pending.keySet().retainAll(available.keySet());
 
         if (!pending.isEmpty()) {
             primeWorldgenHeightmaps(level, chunk.getPos());
         }
-        for (ResourceLocation featureId : pending) {
+        for (Map.Entry<ResourceLocation, Boolean> migration : pending.entrySet()) {
+            ResourceLocation featureId = migration.getKey();
             OptionalInt step = OreFeatureDiscovery.findStepInChunk(chunk, featureId);
             if (step.isPresent()) {
-                runFeature(level, chunk, featureId, step.getAsInt());
+                runFeature(level, chunk, featureId, step.getAsInt(), migration.getValue());
             }
         }
 
@@ -183,17 +204,29 @@ public final class RetrogenManager {
         int logInterval = OreRenewalConfig.LOG_EVERY_N_CHUNKS.get();
         if (logInterval > 0 && processed % logInterval == 0) {
             OreRenewal.LOGGER.info(
-                    "Ore Renewal processed {} chunks this session ({} feature runs, {} successful placements, {} failures, {} queued)",
-                    processed, featureRuns.get(), successfulPlacements.get(), failedFeatureRuns.get(), queued.size());
+                    "Ore Renewal processed {} chunks this session ({} feature runs, {} successful placements, {} historical features already present, {} failures, {} queued)",
+                    processed, featureRuns.get(), successfulPlacements.get(), skippedExistingFeatures.get(),
+                    failedFeatureRuns.get(), queued.size());
         }
     }
 
-    private void runFeature(ServerLevel level, LevelChunk chunk, ResourceLocation featureId, int generationStep) {
+    private void runFeature(
+            ServerLevel level,
+            LevelChunk chunk,
+            ResourceLocation featureId,
+            int generationStep,
+            boolean skipIfPresent
+    ) {
         Registry<PlacedFeature> registry = level.registryAccess().registryOrThrow(Registries.PLACED_FEATURE);
         ResourceKey<PlacedFeature> key = ResourceKey.create(Registries.PLACED_FEATURE, featureId);
         Holder<PlacedFeature> holder = registry.getHolder(key).orElse(null);
         if (holder == null) {
             OreRenewal.LOGGER.warn("Queued placed feature {} no longer exists; skipping it", featureId);
+            return;
+        }
+
+        if (skipIfPresent && OreFeatureDiscovery.hasProducedOreBlock(chunk, holder.value())) {
+            skippedExistingFeatures.incrementAndGet();
             return;
         }
 
@@ -302,6 +335,31 @@ public final class RetrogenManager {
         return dimensions;
     }
 
+    public int forceModdedFeatures(MinecraftServer server) {
+        int featureDimensions = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            Map<ResourceLocation, Integer> available = currentFeatures.getOrDefault(level.dimension(), Map.of());
+            Set<ResourceLocation> modded = moddedFeatures(available);
+            if (!modded.isEmpty()) {
+                OreProfileSavedData.get(level).forceHistoricalMigration(modded);
+                featureDimensions += modded.size();
+                OreRenewal.LOGGER.info(
+                        "Manual all-modded migration for {} adds: {}",
+                        level.dimension().location(), formatIds(modded));
+            }
+        }
+        if (featureDimensions > 0) {
+            enqueueAllLoaded();
+        }
+        return featureDimensions;
+    }
+
+    private static Set<ResourceLocation> moddedFeatures(Map<ResourceLocation, Integer> available) {
+        return available.keySet().stream()
+                .filter(id -> !ResourceLocation.DEFAULT_NAMESPACE.equals(id.getNamespace()))
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
     public Set<ResourceLocation> currentFeatures() {
         Set<ResourceLocation> result = new LinkedHashSet<>();
         currentFeatures.values().forEach(features -> result.addAll(features.keySet()));
@@ -335,6 +393,10 @@ public final class RetrogenManager {
 
     public long successfulPlacementCount() {
         return successfulPlacements.get();
+    }
+
+    public long skippedExistingFeatureCount() {
+        return skippedExistingFeatures.get();
     }
 
     private static String formatIds(Collection<ResourceLocation> ids) {
