@@ -336,8 +336,12 @@ public final class LifecycleScenarioGameTests {
             int withABA = markerCount(level, C_WITH_A_B, MARKER_A);
             int withABB = markerCount(level, C_WITH_A_B, MARKER_B);
 
-            helper.assertTrue(beforeA > 0, "Bootstrap did not add fixture A to the pre-mod cohort");
-            helper.assertTrue(beforeB > 0, "Bootstrap did not add fixture B to the pre-mod cohort");
+            helper.assertTrue(beforeA > 0,
+                    "Bootstrap did not add fixture A to the pre-mod cohort; "
+                            + retrogenDiagnostics(level, C_BEFORE_A, FEATURE_A));
+            helper.assertTrue(beforeB > 0,
+                    "Bootstrap did not add fixture B to the pre-mod cohort; "
+                            + retrogenDiagnostics(level, C_BEFORE_A, FEATURE_B));
             helper.assertTrue(withAA == state.requireInt("c_with_a_a_before"),
                     "Bootstrap duplicated fixture A in the A-only cohort");
             helper.assertTrue(withAB > 0, "Bootstrap did not add fixture B to the A-only cohort");
@@ -447,8 +451,10 @@ public final class LifecycleScenarioGameTests {
     private static void resetTargetBands(ServerLevel level, ChunkPos center) {
         LevelChunk chunk = level.getChunk(center.x, center.z);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int x = center.getMinBlockX(); x <= center.getMaxBlockX(); x++) {
-            for (int z = center.getMinBlockZ(); z <= center.getMaxBlockZ(); z++) {
+        for (int x = center.getMinBlockX() + TARGET_MARGIN;
+             x <= center.getMaxBlockX() - TARGET_MARGIN; x++) {
+            for (int z = center.getMinBlockZ() + TARGET_MARGIN;
+                 z <= center.getMaxBlockZ() - TARGET_MARGIN; z++) {
                 fillTarget(level, cursor, x, z, TARGET_A_MIN_Y, TARGET_A_MAX_Y, TARGET_A);
                 fillTarget(level, cursor, x, z, TARGET_B_MIN_Y, TARGET_B_MAX_Y, TARGET_B);
             }
@@ -648,7 +654,8 @@ public final class LifecycleScenarioGameTests {
                     + ", queued=" + managerType.getMethod("queuedChunkCount").invoke(manager)
                     + ", processed=" + managerType.getMethod("processedChunkCount").invoke(manager)
                     + ", runs=" + managerType.getMethod("featureRunCount").invoke(manager)
-                    + ", successful=" + managerType.getMethod("successfulPlacementCount").invoke(manager);
+                    + ", successful=" + managerType.getMethod("successfulPlacementCount").invoke(manager)
+                    + ", skipped=" + managerType.getMethod("skippedExistingFeatureCount").invoke(manager);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return "diagnostics unavailable: " + exception;
         }
