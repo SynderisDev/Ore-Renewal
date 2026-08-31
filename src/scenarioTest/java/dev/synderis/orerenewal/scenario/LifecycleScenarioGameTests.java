@@ -65,9 +65,12 @@ public final class LifecycleScenarioGameTests {
     private static final ChunkPos C_WITH_A = new ChunkPos(84, 80);
     private static final ChunkPos C_WITH_A_B = new ChunkPos(88, 80);
 
-    private static final int TARGET_MIN_OFFSET = 0;
-    private static final int TARGET_MAX_OFFSET = 12;
-    private static final int FIXTURE_PLACEMENT_OFFSET = 3;
+    private static final int TARGET_A_MIN_Y = 8;
+    private static final int TARGET_A_MAX_Y = 24;
+    private static final int TARGET_B_MIN_Y = 32;
+    private static final int TARGET_B_MAX_Y = 48;
+    private static final int FIXTURE_A_PLACEMENT_Y = 16;
+    private static final int FIXTURE_B_PLACEMENT_Y = 40;
     private static final int PRESENCE_A_Y = 70;
     private static final int PRESENCE_B_Y = 71;
     private static final int SET_BLOCK_FLAGS = 2;
@@ -107,11 +110,13 @@ public final class LifecycleScenarioGameTests {
         ServerLevel level = helper.getLevel();
         prepareCohort(level, A_EXISTING);
         plantSafetyMarkers(level, A_EXISTING);
+        assertChunkAtCurrentProfileRevision(helper, level, A_EXISTING);
         assertMarkerCounts(helper, level, A_EXISTING, 0, 0);
         assertSafetyMarkers(helper, level, A_EXISTING);
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, A_EXISTING, 0, 0);
             assertSafetyMarkers(helper, level, A_EXISTING);
+            assertChunkAtCurrentProfileRevision(helper, level, A_EXISTING);
             ScenarioState.get(level).putInt("a_phase", 0);
         });
     }
@@ -442,12 +447,10 @@ public final class LifecycleScenarioGameTests {
     private static void resetTargetBands(ServerLevel level, ChunkPos center) {
         LevelChunk chunk = level.getChunk(center.x, center.z);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        int targetMinY = level.getMinBuildHeight() + TARGET_MIN_OFFSET;
-        int targetMaxY = level.getMinBuildHeight() + TARGET_MAX_OFFSET;
         for (int x = center.getMinBlockX(); x <= center.getMaxBlockX(); x++) {
             for (int z = center.getMinBlockZ(); z <= center.getMaxBlockZ(); z++) {
-                Block target = x - center.getMinBlockX() < 8 ? TARGET_A : TARGET_B;
-                fillTarget(level, cursor, x, z, targetMinY, targetMaxY, target);
+                fillTarget(level, cursor, x, z, TARGET_A_MIN_Y, TARGET_A_MAX_Y, TARGET_A);
+                fillTarget(level, cursor, x, z, TARGET_B_MIN_Y, TARGET_B_MAX_Y, TARGET_B);
             }
         }
         Heightmap.primeHeightmaps(chunk, EnumSet.of(
@@ -538,10 +541,12 @@ public final class LifecycleScenarioGameTests {
             GameTestHelper helper,
             ServerLevel level,
             ChunkPos pos,
-            ResourceLocation featureId
+        ResourceLocation featureId
     ) {
         Set<Holder<Biome>> biomes = new LinkedHashSet<>();
-        int placementY = level.getMinBuildHeight() + FIXTURE_PLACEMENT_OFFSET;
+        int placementY = featureId.equals(FEATURE_A)
+                ? FIXTURE_A_PLACEMENT_Y
+                : FIXTURE_B_PLACEMENT_Y;
         for (int x = pos.getMinBlockX(); x <= pos.getMaxBlockX(); x++) {
             for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
                 biomes.add(level.getBiome(new BlockPos(x, placementY, z)));

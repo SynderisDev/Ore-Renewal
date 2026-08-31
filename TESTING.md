@@ -43,9 +43,8 @@ Fixture A and B are independent low-code data-pack mods. Fixture A uses the
 standard `ORE` generator and fixture B uses `SCATTERED_ORE`. Each targets a
 different artificial substrate, while assertions count only the safe interior
 of the test chunk so neighboring feature runs cannot contaminate them.
-The substrates occupy separate halves of a bottom-relative stratum, keeping
-both fixtures below even an empty world's world-generation heightmap. Their
-test-only biome tags cover normal overworld biomes plus a void fallback, and
+The substrates occupy separate fixed-height strata. Their test-only biome tags
+cover normal overworld biomes plus a void fallback, and
 every phase asserts that the fixture is present in the actual candidate biome
 at the placement height. The test fixture omits the redundant placement-time
 biome predicate after making that assertion, keeping synthetic placement
