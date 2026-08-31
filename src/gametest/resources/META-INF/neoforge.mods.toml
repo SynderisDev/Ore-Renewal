@@ -1,0 +1,16 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="ore_renewal_gametest"
+version="1"
+displayName="Ore Renewal GameTest Support"
+description='''Development-only headless integration tests.'''
+
+[[dependencies."ore_renewal_gametest"]]
+    modId="ore_renewal"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"

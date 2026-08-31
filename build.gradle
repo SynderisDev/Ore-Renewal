@@ -14,6 +14,38 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+def generatedGameTestResources = layout.buildDirectory.dir('generated/gameTestResources')
+def generateGameTestStructures = tasks.register('generateGameTestStructures') {
+    def encodedStructure = layout.projectDirectory.file('src/gametest/templates/empty3x3x3.nbt.base64')
+    def generatedStructure = generatedGameTestResources.map {
+        it.file("data/${mod_id}/structure/empty3x3x3.nbt")
+    }
+
+    inputs.file(encodedStructure)
+    outputs.file(generatedStructure)
+
+    doLast {
+        def outputFile = generatedStructure.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.bytes = Base64.decoder.decode(encodedStructure.asFile.text.trim())
+    }
+}
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+
+    gameTest {
+        java.setSrcDirs(['src/gametest/java'])
+        resources.setSrcDirs(['src/gametest/resources'])
+        resources.srcDir generatedGameTestResources
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
 neoForge {
     version = project.neo_version
 
@@ -22,24 +54,48 @@ neoForge {
         minecraftVersion = project.parchment_minecraft_version
     }
 
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+        "${mod_id}_gametest" {
+            sourceSet(sourceSets.gameTest)
+        }
+    }
+
+    addModdingDependenciesTo sourceSets.gameTest
+
+    unitTest {
+        enable()
+        testedMod = mods.getByName(project.mod_id)
+        loadedMods = [mods.getByName(project.mod_id)]
+    }
+
     runs {
         client {
             client()
+            loadedMods = [mods.getByName(project.mod_id)]
         }
 
         server {
             server()
             programArgument '--nogui'
+            loadedMods = [mods.getByName(project.mod_id)]
+        }
+
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('run-gametest').get().asFile
+            sourceSet = sourceSets.gameTest
+            loadedMods = [
+                    mods.getByName(project.mod_id),
+                    mods.getByName("${project.mod_id}_gametest")
+            ]
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
         configureEach {
             logLevel = org.slf4j.event.Level.INFO
-        }
-    }
-
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
         }
     }
 }
@@ -48,11 +104,6 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-sourceSets.test {
-    compileClasspath += sourceSets.main.compileClasspath
-    runtimeClasspath += sourceSets.main.runtimeClasspath
 }
 
 def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
@@ -81,6 +132,18 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+}
+
+tasks.named('processGameTestResources').configure {
+    dependsOn generateGameTestStructures
+}
+
+def cleanGameTestRun = tasks.register('cleanGameTestRun', Delete) {
+    delete layout.buildDirectory.dir('run-gametest')
+}
+
+tasks.named('runGameTestServer').configure {
+    dependsOn cleanGameTestRun
 }
 
 tasks.named('jar', Jar).configure {

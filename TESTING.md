@@ -1,5 +1,26 @@
 # Compatibility test report
 
+## Automated headless verification
+
+The repository has two automated test layers, neither of which launches a
+Minecraft client:
+
+- `./gradlew test` runs the fast JVM unit tests.
+- `./gradlew runGameTestServer` starts NeoForge's dedicated GameTest server,
+  loads Ore Renewal against real registries and chunks, runs all required game
+  tests, and exits non-zero if a required test fails.
+
+GitHub Actions runs both commands on Java 21 for every pull request and for
+pushes to `main` and `fix/**` branches. The GameTest sources live in the
+separate `gameTest` source set and are not included in the release JAR.
+
+The initial server tests verify that Ore Renewal loads on a physical dedicated
+server without a client, discovers real vanilla ore placed features in biome
+generation settings, resolves their generation step in a real chunk, and that
+the chunk-load handler respects NeoForge's new-chunk flag when applying the
+exclusion sentinel. Each GameTest starts with a fresh world directory under
+`build/run-gametest`.
+
 Tested on a dedicated NeoForge 21.1.233 development server running Minecraft 1.21.1.
 
 ## Mods
