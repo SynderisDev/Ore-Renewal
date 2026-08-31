@@ -340,8 +340,31 @@ def cleanGameTestRun = tasks.register('cleanGameTestRun', Delete) {
     delete layout.buildDirectory.dir('run-gametest')
 }
 
+def requiredGameTestsCompletion = layout.buildDirectory.file(
+        'run-gametest/required-gametests.complete')
+def requiredGameTestsCompletionText = [
+        'dedicatedServerLoadsAndDiscoversVanillaOres',
+        'chunkLoadMarksOnlyNewChunks',
+        'operatorCommandSurfaceIsRegistered'
+].join('\n')
+
 tasks.named('runGameTestServer').configure {
     dependsOn cleanGameTestRun
+    doFirst {
+        def completionFile = requiredGameTestsCompletion.get().asFile
+        if (completionFile.exists() && !completionFile.delete()) {
+            throw new GradleException(
+                    'Could not delete the stale required GameTest completion marker')
+        }
+    }
+    doLast {
+        def completionFile = requiredGameTestsCompletion.get().asFile
+        if (!completionFile.isFile()
+                || completionFile.getText('UTF-8').trim() != requiredGameTestsCompletionText) {
+            throw new GradleException(
+                    'GameTest server exited without running all three required Ore Renewal GameTests')
+        }
+    }
 }
 
 def cleanLifecycleWorlds = tasks.register('cleanLifecycleWorlds', Delete) {

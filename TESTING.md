@@ -22,7 +22,9 @@ assertions and a synchronous world save. Gradle deletes that marker before the
 phase and fails if the exact marker is absent afterward. This prevents
 Minecraft's zero-test, zero-exit-code behavior from producing a false-green CI
 run. The lifecycle invocation is serialized to keep several memory-heavy
-dedicated servers from contending on one GitHub runner.
+dedicated servers from contending on one GitHub runner. The ordinary GameTest
+server has a separate aggregate marker written only after all three exact smoke
+tests pass, so missing test discovery also fails closed.
 
 The initial server tests verify that Ore Renewal loads on a physical dedicated
 server without a client, discovers real vanilla ore placed features in biome
@@ -47,11 +49,16 @@ presence checks or marker-count assertions.
 The substrates occupy separate fixed-height strata. Their test-only biome tags
 cover normal overworld biomes plus a void fallback, and
 every phase asserts that the fixture is present in the actual candidate biome
-at the placement height. Both fixtures retain Minecraft's placement-time biome
-predicate, so their `placeWithBiomeCheck` calls also exercise top-feature
-membership and the same biome restriction used by production retrogen. Each
-phase also re-forces the complete 3x3 cohort before migration so accelerated
-server ticks cannot unload a needed neighbor. The harness re-primes
+at the placement height. The fixtures omit only the final `minecraft:biome`
+placement modifier because GameTest's intentionally undecorated flat generator
+removes all features from its adjusted generation settings, causing that
+modifier to reject every synthetic placement. The harness and production both
+call `placeWithBiomeCheck`; candidate-biome registration is asserted directly,
+while normal-generator biome-filter behavior remains outside this flat-world
+test boundary. Fixture B is registered at `UNDERGROUND_DECORATION`, so the
+lifecycle suite also exercises discovery and migration outside the usual ore
+generation step. Each phase re-forces the complete 3x3 cohort before migration
+so accelerated server ticks cannot unload a needed neighbor. The harness re-primes
 world-generation heightmaps after installing its artificial ore strata so the
 standard generators exercise those targets rather than rejecting positions
 above the intentionally empty GameTest terrain.
@@ -60,10 +67,12 @@ so profile SavedData, chunk attachments, new-chunk exclusion, historical
 presence checks, and restart idempotency are exercised through real persistence.
 All lifecycle worlds and diagnostics are kept under `build/run-lifecycle`.
 
-Focused JVM tests also cover profile serialization and feature re-addition,
-tick throttling, queue ordering and physical deduplication, next-tick retry
-barriers, fairness behind healthy work, and the rule that a failed feature
-batch must not commit a chunk revision. Retried batches provide at-least-once
+Focused JVM tests also cover discovery safety boundaries (standard generators,
+ore identity, geology rejection, allowlists, custom generators, and every
+decoration step), profile serialization and feature re-addition, tick
+throttling, queue ordering and physical deduplication, next-tick retry barriers,
+fairness behind healthy work, and the rule that a failed feature batch must not
+commit a chunk revision. Retried batches provide at-least-once
 execution: an earlier successful feature can run again if a later feature in
 the same batch fails, so opted-in custom generators should be idempotent.
 

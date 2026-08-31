@@ -78,6 +78,10 @@ public final class LifecycleScenarioGameTests {
     private static final int SETTLE_TICKS = 80;
     private static final int SAFETY_X_OFFSET = 8;
     private static final int SAFETY_Z_OFFSET = 8;
+    private static final int SAFETY_GLASS_Y = FIXTURE_A_PLACEMENT_Y - 2;
+    private static final int SAFETY_CRAFTING_TABLE_Y = FIXTURE_A_PLACEMENT_Y - 1;
+    private static final int SAFETY_CHEST_Y = FIXTURE_A_PLACEMENT_Y;
+    private static final int SAFETY_MINED_AIR_Y = FIXTURE_A_PLACEMENT_Y + 1;
 
     private LifecycleScenarioGameTests() {
     }
@@ -207,6 +211,8 @@ public final class LifecycleScenarioGameTests {
                     state.requireInt("a_post_a"), state.requireInt("a_post_b"));
             assertChunkAtCurrentProfileRevision(helper, level, A_EXISTING);
             assertChunkAtCurrentProfileRevision(helper, level, A_POST_MOD);
+            assertNoRetrogenWorkAfterRestart(helper);
+            assertSafetyMarkers(helper, level, A_EXISTING);
             state.putInt("a_phase", 4);
             releaseNeighborhoods(level, A_EXISTING, A_POST_MOD);
         });
@@ -262,6 +268,7 @@ public final class LifecycleScenarioGameTests {
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, B_EXISTING, expectedA, 0);
             assertChunkAtCurrentProfileRevision(helper, level, B_EXISTING);
+            assertNoRetrogenWorkAfterRestart(helper);
             ScenarioState.get(level).putInt("b_phase", 3);
             releaseNeighborhoods(level, B_EXISTING);
         });
@@ -390,6 +397,7 @@ public final class LifecycleScenarioGameTests {
             assertChunkAtCurrentProfileRevision(helper, level, C_BEFORE_A);
             assertChunkAtCurrentProfileRevision(helper, level, C_WITH_A);
             assertChunkAtCurrentProfileRevision(helper, level, C_WITH_A_B);
+            assertNoRetrogenWorkAfterRestart(helper);
             state.putInt("c_phase", 4);
             releaseNeighborhoods(level, C_BEFORE_A, C_WITH_A, C_WITH_A_B);
         });
@@ -492,11 +500,14 @@ public final class LifecycleScenarioGameTests {
     }
 
     private static void plantSafetyMarkers(ServerLevel level, ChunkPos center) {
-        level.setBlock(safetyPos(center, 60), Blocks.GLASS.defaultBlockState(), SET_BLOCK_FLAGS);
-        level.setBlock(safetyPos(center, 61), Blocks.CRAFTING_TABLE.defaultBlockState(), SET_BLOCK_FLAGS);
-        level.setBlock(safetyPos(center, 62), Blocks.CHEST.defaultBlockState(), SET_BLOCK_FLAGS);
-        level.setBlock(safetyPos(center, 63), Blocks.AIR.defaultBlockState(), SET_BLOCK_FLAGS);
-        if (!(level.getBlockEntity(safetyPos(center, 62)) instanceof ChestBlockEntity chest)) {
+        level.setBlock(safetyPos(center, SAFETY_GLASS_Y), Blocks.GLASS.defaultBlockState(), SET_BLOCK_FLAGS);
+        level.setBlock(
+                safetyPos(center, SAFETY_CRAFTING_TABLE_Y),
+                Blocks.CRAFTING_TABLE.defaultBlockState(),
+                SET_BLOCK_FLAGS);
+        level.setBlock(safetyPos(center, SAFETY_CHEST_Y), Blocks.CHEST.defaultBlockState(), SET_BLOCK_FLAGS);
+        level.setBlock(safetyPos(center, SAFETY_MINED_AIR_Y), Blocks.AIR.defaultBlockState(), SET_BLOCK_FLAGS);
+        if (!(level.getBlockEntity(safetyPos(center, SAFETY_CHEST_Y)) instanceof ChestBlockEntity chest)) {
             throw new GameTestAssertException("Could not create the lifecycle safety chest");
         }
         chest.setItem(0, new ItemStack(Items.DIAMOND));
@@ -504,17 +515,18 @@ public final class LifecycleScenarioGameTests {
     }
 
     private static void assertSafetyMarkers(GameTestHelper helper, ServerLevel level, ChunkPos center) {
-        helper.assertTrue(level.getBlockState(safetyPos(center, 60)).is(Blocks.GLASS),
+        helper.assertTrue(level.getBlockState(safetyPos(center, SAFETY_GLASS_Y)).is(Blocks.GLASS),
                 "Retrogen changed the glass safety marker");
-        helper.assertTrue(level.getBlockState(safetyPos(center, 61)).is(Blocks.CRAFTING_TABLE),
+        helper.assertTrue(
+                level.getBlockState(safetyPos(center, SAFETY_CRAFTING_TABLE_Y)).is(Blocks.CRAFTING_TABLE),
                 "Retrogen changed the crafting-table safety marker");
-        helper.assertTrue(level.getBlockState(safetyPos(center, 62)).is(Blocks.CHEST),
+        helper.assertTrue(level.getBlockState(safetyPos(center, SAFETY_CHEST_Y)).is(Blocks.CHEST),
                 "Retrogen changed the chest safety marker");
-        helper.assertTrue(level.getBlockState(safetyPos(center, 63)).isAir(),
+        helper.assertTrue(level.getBlockState(safetyPos(center, SAFETY_MINED_AIR_Y)).isAir(),
                 "Retrogen filled the mined-air safety marker");
-        helper.assertTrue(level.getBlockEntity(safetyPos(center, 62)) instanceof ChestBlockEntity,
+        helper.assertTrue(level.getBlockEntity(safetyPos(center, SAFETY_CHEST_Y)) instanceof ChestBlockEntity,
                 "Retrogen removed the safety chest block entity");
-        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(safetyPos(center, 62));
+        ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(safetyPos(center, SAFETY_CHEST_Y));
         helper.assertTrue(chest.getItem(0).is(Items.DIAMOND) && chest.getItem(0).getCount() == 1,
                 "Retrogen changed the safety chest contents");
     }
@@ -638,9 +650,7 @@ public final class LifecycleScenarioGameTests {
                     .getMethod("findStepInChunk", LevelChunk.class, ResourceLocation.class)
                     .invoke(null, chunk, featureId);
 
-            Class<?> modType = Class.forName("dev.synderis.orerenewal.OreRenewal");
-            Object manager = modType.getField("RETROGEN").get(null);
-            Class<?> managerType = manager.getClass();
+            Object manager = retrogenManager();
 
             int fullNeighbors = 0;
             for (int offsetX = -1; offsetX <= 1; offsetX++) {
@@ -657,14 +667,40 @@ public final class LifecycleScenarioGameTests {
                     + ", profileRevision=" + profileRevision
                     + ", step=" + (step.isPresent() ? step.getAsInt() : "missing")
                     + ", fullNeighbors=" + fullNeighbors + "/9"
-                    + ", queued=" + managerType.getMethod("queuedChunkCount").invoke(manager)
-                    + ", processed=" + managerType.getMethod("processedChunkCount").invoke(manager)
-                    + ", runs=" + managerType.getMethod("featureRunCount").invoke(manager)
-                    + ", successful=" + managerType.getMethod("successfulPlacementCount").invoke(manager)
-                    + ", skipped=" + managerType.getMethod("skippedExistingFeatureCount").invoke(manager);
+                    + ", queued=" + retrogenCounter(manager, "queuedChunkCount")
+                    + ", processed=" + retrogenCounter(manager, "processedChunkCount")
+                    + ", runs=" + retrogenCounter(manager, "featureRunCount")
+                    + ", successful=" + retrogenCounter(manager, "successfulPlacementCount")
+                    + ", skipped=" + retrogenCounter(manager, "skippedExistingFeatureCount");
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return "diagnostics unavailable: " + exception;
         }
+    }
+
+    private static void assertNoRetrogenWorkAfterRestart(GameTestHelper helper) {
+        try {
+            Object manager = retrogenManager();
+            long processed = retrogenCounter(manager, "processedChunkCount");
+            long featureRuns = retrogenCounter(manager, "featureRunCount");
+            helper.assertTrue(processed == 0 && featureRuns == 0,
+                    "Restart replayed completed retrogen work: processed=" + processed
+                            + ", featureRuns=" + featureRuns);
+        } catch (ReflectiveOperationException exception) {
+            throw new GameTestAssertException("Could not inspect Ore Renewal counters: " + exception);
+        }
+    }
+
+    private static Object retrogenManager() throws ReflectiveOperationException {
+        Class<?> modType = Class.forName("dev.synderis.orerenewal.OreRenewal");
+        return modType.getField("RETROGEN").get(null);
+    }
+
+    private static long retrogenCounter(Object manager, String methodName) throws ReflectiveOperationException {
+        Object value = manager.getClass().getMethod(methodName).invoke(manager);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        throw new ReflectiveOperationException(methodName + " did not return a numeric counter");
     }
 
     private static void assertMarkerCounts(
