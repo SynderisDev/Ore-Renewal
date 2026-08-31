@@ -1,6 +1,6 @@
 {
   "type": "neoforge:add_features",
-  "biomes": "#minecraft:is_overworld",
+  "biomes": "#c:is_overworld",
   "features": "ore_renewal_fixture_a:marker_ore",
   "step": "underground_ores"
 }

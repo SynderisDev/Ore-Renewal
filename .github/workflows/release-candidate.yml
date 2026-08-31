@@ -56,7 +56,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run complete client-free verification
-        run: ./gradlew --no-daemon --no-parallel --stacktrace build headlessCi
+        run: ./gradlew --no-daemon --no-parallel --max-workers=1 --stacktrace build headlessCi
 
       - name: Package exact candidate and provenance
         run: |
