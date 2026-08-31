@@ -121,7 +121,7 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "a_phase", 0);
-        loadNeighborhood(level, A_EXISTING);
+        persistNeighborhood(level, A_EXISTING);
         assertFixtureRegisteredForChunk(helper, level, A_EXISTING, FEATURE_A);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, A_EXISTING, MARKER_A);
@@ -192,8 +192,8 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "a_phase", 3);
-        loadNeighborhood(level, A_EXISTING);
-        loadNeighborhood(level, A_POST_MOD);
+        persistNeighborhood(level, A_EXISTING);
+        persistNeighborhood(level, A_POST_MOD);
         ScenarioState state = ScenarioState.get(level);
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, A_EXISTING,
@@ -221,7 +221,7 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "b_phase", 0);
-        loadNeighborhood(level, B_EXISTING);
+        persistNeighborhood(level, B_EXISTING);
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, B_EXISTING, 0, 0);
             ScenarioState.get(level).putInt("b_phase", 1);
@@ -233,7 +233,7 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "b_phase", 1);
-        loadNeighborhood(level, B_EXISTING);
+        persistNeighborhood(level, B_EXISTING);
         assertFixtureRegisteredForChunk(helper, level, B_EXISTING, FEATURE_A);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, B_EXISTING, MARKER_A);
@@ -252,7 +252,7 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "b_phase", 2);
-        loadNeighborhood(level, B_EXISTING);
+        persistNeighborhood(level, B_EXISTING);
         int expectedA = ScenarioState.get(level).requireInt("b_existing_a");
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, B_EXISTING, expectedA, 0);
@@ -314,9 +314,9 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "c_phase", 2);
-        loadNeighborhood(level, C_BEFORE_A);
-        loadNeighborhood(level, C_WITH_A);
-        loadNeighborhood(level, C_WITH_A_B);
+        persistNeighborhood(level, C_BEFORE_A);
+        persistNeighborhood(level, C_WITH_A);
+        persistNeighborhood(level, C_WITH_A_B);
         for (ChunkPos cohort : List.of(C_BEFORE_A, C_WITH_A, C_WITH_A_B)) {
             assertFixtureRegisteredForChunk(helper, level, cohort, FEATURE_A);
             assertFixtureRegisteredForChunk(helper, level, cohort, FEATURE_B);
@@ -360,9 +360,9 @@ public final class LifecycleScenarioGameTests {
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
         requirePhase(level, "c_phase", 3);
-        loadNeighborhood(level, C_BEFORE_A);
-        loadNeighborhood(level, C_WITH_A);
-        loadNeighborhood(level, C_WITH_A_B);
+        persistNeighborhood(level, C_BEFORE_A);
+        persistNeighborhood(level, C_WITH_A);
+        persistNeighborhood(level, C_WITH_A_B);
         ScenarioState state = ScenarioState.get(level);
 
         succeedAfterSettling(helper, () -> {
