@@ -282,6 +282,8 @@ public final class LifecycleScenarioGameTests {
         requirePhase(level, "c_phase", 0);
         prepareCohort(level, C_WITH_A);
         placeFixture(helper, level, C_WITH_A, FEATURE_A, 201L);
+        helper.assertTrue(markerCount(level, C_WITH_A, MARKER_A) > 0,
+                "Fixture A placement produced no ore before its historical-presence marker was normalized");
         resetTargetBands(level, C_WITH_A);
         plantPresenceMarker(level, C_WITH_A, MARKER_A, PRESENCE_A_Y);
         int countA = markerCount(level, C_WITH_A, MARKER_A);
@@ -300,6 +302,10 @@ public final class LifecycleScenarioGameTests {
         prepareCohort(level, C_WITH_A_B);
         placeFixture(helper, level, C_WITH_A_B, FEATURE_A, 301L);
         placeFixture(helper, level, C_WITH_A_B, FEATURE_B, 302L);
+        helper.assertTrue(markerCount(level, C_WITH_A_B, MARKER_A) > 0,
+                "Fixture A placement produced no ore before its historical-presence marker was normalized");
+        helper.assertTrue(markerCount(level, C_WITH_A_B, MARKER_B) > 0,
+                "Fixture B placement produced no ore before its historical-presence marker was normalized");
         resetTargetBands(level, C_WITH_A_B);
         plantPresenceMarker(level, C_WITH_A_B, MARKER_A, PRESENCE_A_Y);
         plantPresenceMarker(level, C_WITH_A_B, MARKER_B, PRESENCE_B_Y);
