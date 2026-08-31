@@ -118,7 +118,9 @@ public final class LifecycleScenarioGameTests {
         loadNeighborhood(level, A_EXISTING);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, A_EXISTING, MARKER_A);
-            helper.assertTrue(countA > 0, "Fixture A was not retro-generated into the pre-mod chunk");
+            helper.assertTrue(countA > 0,
+                    "Fixture A was not retro-generated into the pre-mod chunk; controlled targets="
+                            + markerCount(level, A_EXISTING, TARGET_A));
             helper.assertTrue(markerCount(level, A_EXISTING, MARKER_B) == 0,
                     "Fixture B unexpectedly appeared before it was installed");
             assertChunkAtCurrentProfileRevision(helper, level, A_EXISTING);
@@ -425,10 +427,8 @@ public final class LifecycleScenarioGameTests {
     private static void resetTargetBands(ServerLevel level, ChunkPos center) {
         LevelChunk chunk = level.getChunk(center.x, center.z);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int x = center.getMinBlockX() + TARGET_MARGIN;
-             x <= center.getMaxBlockX() - TARGET_MARGIN; x++) {
-            for (int z = center.getMinBlockZ() + TARGET_MARGIN;
-                 z <= center.getMaxBlockZ() - TARGET_MARGIN; z++) {
+        for (int x = center.getMinBlockX(); x <= center.getMaxBlockX(); x++) {
+            for (int z = center.getMinBlockZ(); z <= center.getMaxBlockZ(); z++) {
                 fillTarget(level, cursor, x, z, TARGET_A_MIN_Y, TARGET_A_MAX_Y, TARGET_A);
                 fillTarget(level, cursor, x, z, TARGET_B_MIN_Y, TARGET_B_MAX_Y, TARGET_B);
             }
@@ -502,11 +502,15 @@ public final class LifecycleScenarioGameTests {
         ResourceKey<PlacedFeature> key = ResourceKey.create(Registries.PLACED_FEATURE, featureId);
         Holder<PlacedFeature> holder = registry.getHolder(key).orElseThrow(() ->
                 new GameTestAssertException("Missing fixture placed feature " + featureId));
+        Block target = featureId.equals(FEATURE_A) ? TARGET_A : TARGET_B;
+        int targetCount = markerCount(level, center, target);
+        helper.assertTrue(targetCount > 0, "Fixture has no controlled target blocks: " + featureId);
         WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(seed));
         BlockPos origin = new BlockPos(center.getMinBlockX(), level.getMinBuildHeight(), center.getMinBlockZ());
         boolean placed = holder.value().placeWithBiomeCheck(
                 level, level.getChunkSource().getGenerator(), random, origin);
-        helper.assertTrue(placed, "Fixture placed feature returned false: " + featureId);
+        helper.assertTrue(placed,
+                "Fixture placed feature returned false: " + featureId + "; controlled targets=" + targetCount);
     }
 
     private static int markerCount(ServerLevel level, ChunkPos pos, Block marker) {
@@ -516,9 +520,9 @@ public final class LifecycleScenarioGameTests {
             if (!section.maybeHas(state -> state.is(marker))) {
                 continue;
             }
-            for (int x = 0; x < 16; x++) {
+            for (int x = TARGET_MARGIN; x < 16 - TARGET_MARGIN; x++) {
                 for (int y = 0; y < 16; y++) {
-                    for (int z = 0; z < 16; z++) {
+                    for (int z = TARGET_MARGIN; z < 16 - TARGET_MARGIN; z++) {
                         if (section.getBlockState(x, y, z).is(marker)) {
                             count++;
                         }
