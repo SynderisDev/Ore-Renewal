@@ -473,10 +473,25 @@ public final class LifecycleScenarioGameTests {
                 fillTarget(level, cursor, x, z, TARGET_B_MIN_Y, TARGET_B_MAX_Y, TARGET_B);
             }
         }
-        Heightmap.primeHeightmaps(chunk, EnumSet.of(
-                Heightmap.Types.OCEAN_FLOOR_WG,
-                Heightmap.Types.WORLD_SURFACE_WG));
+        primeLoadedNeighborhoodHeightmaps(level, center);
         chunk.setUnsaved(true);
+    }
+
+    private static void primeLoadedNeighborhoodHeightmaps(ServerLevel level, ChunkPos center) {
+        EnumSet<Heightmap.Types> types = EnumSet.of(
+                Heightmap.Types.OCEAN_FLOOR_WG,
+                Heightmap.Types.WORLD_SURFACE_WG);
+        for (int offsetX = -1; offsetX <= 1; offsetX++) {
+            for (int offsetZ = -1; offsetZ <= 1; offsetZ++) {
+                if (level.getChunkSource().getChunk(
+                        center.x + offsetX,
+                        center.z + offsetZ,
+                        ChunkStatus.FULL,
+                        false) instanceof LevelChunk loadedChunk) {
+                    Heightmap.primeHeightmaps(loadedChunk, types);
+                }
+            }
+        }
     }
 
     private static void fillTarget(
