@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
@@ -37,6 +38,7 @@ import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -125,7 +127,8 @@ public final class LifecycleScenarioGameTests {
             int countA = markerCount(level, A_EXISTING, MARKER_A);
             helper.assertTrue(countA > 0,
                     "Fixture A was not retro-generated into the pre-mod chunk; controlled targets="
-                            + markerCount(level, A_EXISTING, TARGET_A));
+                            + markerCount(level, A_EXISTING, TARGET_A) + "; "
+                            + retrogenDiagnostics(level, A_EXISTING, FEATURE_A));
             helper.assertTrue(markerCount(level, A_EXISTING, MARKER_B) == 0,
                     "Fixture B unexpectedly appeared before it was installed");
             assertChunkAtCurrentProfileRevision(helper, level, A_EXISTING);
@@ -592,6 +595,58 @@ public final class LifecycleScenarioGameTests {
             }
         }
         return count;
+    }
+
+    private static String retrogenDiagnostics(
+            ServerLevel level,
+            ChunkPos pos,
+            ResourceLocation featureId
+    ) {
+        try {
+            LevelChunk chunk = level.getChunk(pos.x, pos.z);
+            Class<?> attachments = Class.forName("dev.synderis.orerenewal.registry.ModAttachments");
+            Object attachmentHolder = attachments.getField("CHUNK_REVISION").get(null);
+            if (!(attachmentHolder instanceof Supplier<?> supplier)) {
+                throw new IllegalStateException("CHUNK_REVISION is not a deferred attachment holder");
+            }
+            @SuppressWarnings("unchecked")
+            AttachmentType<Integer> attachment = (AttachmentType<Integer>) supplier.get();
+
+            Class<?> profileType = Class.forName("dev.synderis.orerenewal.world.OreProfileSavedData");
+            Object profile = profileType.getMethod("get", ServerLevel.class).invoke(null, level);
+            int profileRevision = (Integer) profileType.getMethod("revision").invoke(profile);
+
+            Class<?> discoveryType = Class.forName("dev.synderis.orerenewal.world.OreFeatureDiscovery");
+            OptionalInt step = (OptionalInt) discoveryType
+                    .getMethod("findStepInChunk", LevelChunk.class, ResourceLocation.class)
+                    .invoke(null, chunk, featureId);
+
+            Class<?> modType = Class.forName("dev.synderis.orerenewal.OreRenewal");
+            Object manager = modType.getField("RETROGEN").get(null);
+            Class<?> managerType = manager.getClass();
+
+            int fullNeighbors = 0;
+            for (int offsetX = -1; offsetX <= 1; offsetX++) {
+                for (int offsetZ = -1; offsetZ <= 1; offsetZ++) {
+                    if (level.getChunkSource().getChunk(
+                            pos.x + offsetX, pos.z + offsetZ, ChunkStatus.FULL, false) instanceof LevelChunk) {
+                        fullNeighbors++;
+                    }
+                }
+            }
+
+            return "chunkRevision=" + chunk.getData(attachment)
+                    + ", hasRevision=" + chunk.hasData(attachment)
+                    + ", profileRevision=" + profileRevision
+                    + ", step=" + (step.isPresent() ? step.getAsInt() : "missing")
+                    + ", fullNeighbors=" + fullNeighbors + "/9"
+                    + ", queued=" + managerType.getMethod("queuedChunkCount").invoke(manager)
+                    + ", processed=" + managerType.getMethod("processedChunkCount").invoke(manager)
+                    + ", runs=" + managerType.getMethod("featureRunCount").invoke(manager)
+                    + ", successful=" + managerType.getMethod("successfulPlacementCount").invoke(manager);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return "diagnostics unavailable: " + exception;
+        }
     }
 
     private static void assertMarkerCounts(
