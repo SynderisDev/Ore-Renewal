@@ -47,11 +47,11 @@ presence checks or marker-count assertions.
 The substrates occupy separate fixed-height strata. Their test-only biome tags
 cover normal overworld biomes plus a void fallback, and
 every phase asserts that the fixture is present in the actual candidate biome
-at the placement height. The test fixture omits the redundant placement-time
-biome predicate after making that assertion, keeping synthetic placement
-independent of registry-holder identity. Each phase also re-forces the complete
-3x3 cohort before migration so accelerated server ticks cannot unload a needed
-neighbor. The harness re-primes
+at the placement height. Both fixtures retain Minecraft's placement-time biome
+predicate, so their `placeWithBiomeCheck` calls also exercise top-feature
+membership and the same biome restriction used by production retrogen. Each
+phase also re-forces the complete 3x3 cohort before migration so accelerated
+server ticks cannot unload a needed neighbor. The harness re-primes
 world-generation heightmaps after installing its artificial ore strata so the
 standard generators exercise those targets rather than rejecting positions
 above the intentionally empty GameTest terrain.
