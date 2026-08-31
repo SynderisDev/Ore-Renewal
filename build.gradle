@@ -127,7 +127,7 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-a').get().asFile
             sourceSet = sourceSets.scenarioTest
             loadedMods = [mods.getByName(project.mod_id), mods.ore_renewal_scenario_tests]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'A0'
         }
 
@@ -140,7 +140,7 @@ neoForge {
                     mods.ore_renewal_scenario_tests,
                     mods.ore_renewal_fixture_a
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'A1'
         }
 
@@ -153,8 +153,22 @@ neoForge {
                     mods.ore_renewal_scenario_tests,
                     mods.ore_renewal_fixture_a
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'A2'
+        }
+
+        scenarioAAddFixtureB {
+            type = 'gameTestServer'
+            gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-a').get().asFile
+            sourceSet = sourceSets.scenarioTest
+            loadedMods = [
+                    mods.getByName(project.mod_id),
+                    mods.ore_renewal_scenario_tests,
+                    mods.ore_renewal_fixture_a,
+                    mods.ore_renewal_fixture_b
+            ]
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'oreRenewal.lifecycle.phase', 'A3'
         }
 
         scenarioARestart {
@@ -164,10 +178,11 @@ neoForge {
             loadedMods = [
                     mods.getByName(project.mod_id),
                     mods.ore_renewal_scenario_tests,
-                    mods.ore_renewal_fixture_a
+                    mods.ore_renewal_fixture_a,
+                    mods.ore_renewal_fixture_b
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
-            systemProperty 'oreRenewal.lifecycle.phase', 'A3'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'oreRenewal.lifecycle.phase', 'A4'
         }
 
         scenarioBCreateExistingWorld {
@@ -175,7 +190,7 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-b').get().asFile
             sourceSet = sourceSets.scenarioTest
             loadedMods = [mods.ore_renewal_scenario_tests]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'B0'
         }
 
@@ -184,7 +199,7 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-b').get().asFile
             sourceSet = sourceSets.scenarioTest
             loadedMods = [mods.getByName(project.mod_id), mods.ore_renewal_scenario_tests]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'B1'
         }
 
@@ -197,7 +212,7 @@ neoForge {
                     mods.ore_renewal_scenario_tests,
                     mods.ore_renewal_fixture_a
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'B2'
         }
 
@@ -210,7 +225,7 @@ neoForge {
                     mods.ore_renewal_scenario_tests,
                     mods.ore_renewal_fixture_a
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'B3'
         }
 
@@ -219,7 +234,7 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-c').get().asFile
             sourceSet = sourceSets.scenarioTest
             loadedMods = [mods.ore_renewal_scenario_tests]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'C0'
         }
 
@@ -228,7 +243,7 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir('run-lifecycle/scenario-c').get().asFile
             sourceSet = sourceSets.scenarioTest
             loadedMods = [mods.ore_renewal_scenario_tests, mods.ore_renewal_fixture_a]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'C1'
         }
 
@@ -241,7 +256,7 @@ neoForge {
                     mods.ore_renewal_fixture_a,
                     mods.ore_renewal_fixture_b
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'C2'
         }
 
@@ -255,7 +270,7 @@ neoForge {
                     mods.ore_renewal_fixture_a,
                     mods.ore_renewal_fixture_b
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'C3'
         }
 
@@ -269,7 +284,7 @@ neoForge {
                     mods.ore_renewal_fixture_a,
                     mods.ore_renewal_fixture_b
             ]
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'ore_renewal_scenario_tests'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'oreRenewal.lifecycle.phase', 'C4'
         }
 
@@ -336,7 +351,8 @@ def cleanLifecycleWorlds = tasks.register('cleanLifecycleWorlds', Delete) {
 def scenarioA0 = tasks.named('runScenarioAFreshWithOreRenewal')
 def scenarioA1 = tasks.named('runScenarioAAddFixtureA')
 def scenarioA2 = tasks.named('runScenarioAGeneratePostModChunk')
-def scenarioA3 = tasks.named('runScenarioARestart')
+def scenarioA3 = tasks.named('runScenarioAAddFixtureB')
+def scenarioA4 = tasks.named('runScenarioARestart')
 def scenarioB0 = tasks.named('runScenarioBCreateExistingWorld')
 def scenarioB1 = tasks.named('runScenarioBAddOreRenewal')
 def scenarioB2 = tasks.named('runScenarioBAddFixtureA')
@@ -347,10 +363,43 @@ def scenarioC2 = tasks.named('runScenarioCAddFixtureB')
 def scenarioC3 = tasks.named('runScenarioCAddOreRenewal')
 def scenarioC4 = tasks.named('runScenarioCRestart')
 
+def verifyLifecyclePhase = { taskProvider, scenario, phase ->
+    def completion = layout.buildDirectory.file(
+            "run-lifecycle/scenario-${scenario}/lifecycle-${phase}.complete")
+    taskProvider.configure {
+        doFirst {
+            completion.get().asFile.delete()
+        }
+        doLast {
+            def completionFile = completion.get().asFile
+            if (!completionFile.isFile() || completionFile.getText('UTF-8').trim() != phase) {
+                throw new GradleException(
+                        "Lifecycle phase ${phase} exited without running its required GameTest")
+            }
+        }
+    }
+}
+
+verifyLifecyclePhase(scenarioA0, 'a', 'A0')
+verifyLifecyclePhase(scenarioA1, 'a', 'A1')
+verifyLifecyclePhase(scenarioA2, 'a', 'A2')
+verifyLifecyclePhase(scenarioA3, 'a', 'A3')
+verifyLifecyclePhase(scenarioA4, 'a', 'A4')
+verifyLifecyclePhase(scenarioB0, 'b', 'B0')
+verifyLifecyclePhase(scenarioB1, 'b', 'B1')
+verifyLifecyclePhase(scenarioB2, 'b', 'B2')
+verifyLifecyclePhase(scenarioB3, 'b', 'B3')
+verifyLifecyclePhase(scenarioC0, 'c', 'C0')
+verifyLifecyclePhase(scenarioC1, 'c', 'C1')
+verifyLifecyclePhase(scenarioC2, 'c', 'C2')
+verifyLifecyclePhase(scenarioC3, 'c', 'C3')
+verifyLifecyclePhase(scenarioC4, 'c', 'C4')
+
 scenarioA0.configure { dependsOn cleanLifecycleWorlds }
 scenarioA1.configure { dependsOn scenarioA0 }
 scenarioA2.configure { dependsOn scenarioA1 }
 scenarioA3.configure { dependsOn scenarioA2 }
+scenarioA4.configure { dependsOn scenarioA3 }
 scenarioB0.configure { dependsOn cleanLifecycleWorlds }
 scenarioB1.configure { dependsOn scenarioB0 }
 scenarioB2.configure { dependsOn scenarioB1 }
@@ -364,7 +413,7 @@ scenarioC4.configure { dependsOn scenarioC3 }
 def lifecycleGameTest = tasks.register('lifecycleGameTest') {
     group = 'verification'
     description = 'Runs persisted-world, multi-restart Ore Renewal lifecycle scenarios.'
-    dependsOn scenarioA3, scenarioB3, scenarioC4
+    dependsOn scenarioA4, scenarioB3, scenarioC4
 }
 
 tasks.register('headlessCi') {

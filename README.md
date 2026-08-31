@@ -79,3 +79,10 @@ The server config is `config/ore_renewal-server.toml`.
 - Minecraft cannot distinguish naturally generated stone from player-placed stone. Standard ore target rules may replace player-placed stone, so always keep a world backup.
 - A custom nonstandard ore generator outside the `UNDERGROUND_ORES` step cannot be identified generically and is ignored.
 - A chunk at the edge of the currently loaded area waits until its neighboring chunks are loaded; this is intentional boundary protection.
+- If one feature in a chunk batch fails, the batch is retried without committing its revision. Earlier successful features in that batch can run again, so custom generators explicitly opted into detection should be idempotent.
+
+## Releasing
+
+Automated tests do not authorize a release. Every release candidate must pass
+the repository's [manual playtest gate](RELEASING.md), and the exact approved
+JAR must be published without rebuilding it.

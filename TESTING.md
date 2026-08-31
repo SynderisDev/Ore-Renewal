@@ -2,7 +2,7 @@
 
 ## Automated headless verification
 
-The repository has two automated test layers, neither of which launches a
+The repository has three automated test layers, none of which launches a
 Minecraft client:
 
 - `./gradlew test` runs the fast JVM unit tests.
@@ -13,9 +13,16 @@ Minecraft client:
   processes. Each scenario reuses its saved world while changing the loaded mod
   set between restarts.
 
-GitHub Actions runs both commands on Java 21 for every pull request and for
+GitHub Actions runs all three layers on Java 21 for every pull request and for
 pushes to `main` and `fix/**` branches. The GameTest sources live in the
 separate `gameTest` source set and are not included in the release JAR.
+
+Every lifecycle JVM must write its own phase-completion marker after its
+assertions and a synchronous world save. Gradle deletes that marker before the
+phase and fails if the exact marker is absent afterward. This prevents
+Minecraft's zero-test, zero-exit-code behavior from producing a false-green CI
+run. The lifecycle invocation is serialized to keep several memory-heavy
+dedicated servers from contending on one GitHub runner.
 
 The initial server tests verify that Ore Renewal loads on a physical dedicated
 server without a client, discovers real vanilla ore placed features in biome
@@ -28,15 +35,35 @@ The lifecycle suite covers these install orders:
 
 | Scenario | Real server phases | Core assertions |
 | --- | --- | --- |
-| Fresh world | Ore Renewal -> fixture A -> new post-mod chunk -> restart | Existing chunks receive A once; chunks generated with A are not retro-generated; marker counts persist across restart. |
+| Fresh world | Ore Renewal -> fixture A -> new post-A chunk -> fixture B -> restart | Existing chunks receive A; the new chunk is stamped at the current revision immediately; both cohorts later receive B without duplicating A; counts persist across restart. |
 | Existing world | Vanilla -> Ore Renewal -> fixture A -> restart | A legacy chunk with no attachment receives A once after the later feature revision and is unchanged on restart. |
 | Established modded world | Vanilla -> fixture A -> fixture B -> Ore Renewal -> restart | Pre-A chunks receive A+B; A-era chunks preserve A and receive B; A+B-era chunks preserve both; all cohorts remain unchanged on restart. |
 
-Fixture A and B are independent low-code data-pack mods with distinct standard
-ore features. The phases run in separate JVMs against the same on-disk world,
+Fixture A and B are independent low-code data-pack mods. Fixture A uses the
+standard `ORE` generator and fixture B uses `SCATTERED_ORE`. Each targets a
+different artificial substrate confined to the safe interior of the test
+chunk, which prevents neighboring feature runs from contaminating assertions.
+The phases run in separate JVMs against the same on-disk world,
 so profile SavedData, chunk attachments, new-chunk exclusion, historical
 presence checks, and restart idempotency are exercised through real persistence.
 All lifecycle worlds and diagnostics are kept under `build/run-lifecycle`.
+
+Focused JVM tests also cover profile serialization and feature re-addition,
+tick throttling, queue ordering and physical deduplication, next-tick retry
+barriers, fairness behind healthy work, and the rule that a failed feature
+batch must not commit a chunk revision. Retried batches provide at-least-once
+execution: an earlier successful feature can run again if a later feature in
+the same batch fails, so opted-in custom generators should be idempotent.
+
+The fresh-world lifecycle keeps glass, mined air, a crafting table, and a chest
+with a diamond unchanged through both migrations and a restart. This validates
+the standard-generator preservation path without claiming that Minecraft can
+distinguish natural stone from player-placed stone.
+
+Release candidates have an additional manual gate described in
+[`RELEASING.md`](RELEASING.md). CI never publishes a release, and only the exact
+JAR manually playtested and approved by the repository owner is eligible for
+publishing.
 
 Tested on a dedicated NeoForge 21.1.233 development server running Minecraft 1.21.1.
 

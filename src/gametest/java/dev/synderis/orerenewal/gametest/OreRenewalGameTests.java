@@ -69,4 +69,23 @@ public final class OreRenewalGameTests {
         }
         helper.succeed();
     }
+
+    @GameTest(template = EMPTY_TEMPLATE, timeoutTicks = 100)
+    public static void operatorCommandSurfaceIsRegistered(GameTestHelper helper) {
+        var root = helper.getLevel().getServer().getCommands().getDispatcher().getRoot();
+        for (String alias : new String[]{"ore_renewal", "orerenewal"}) {
+            var command = root.getChild(alias);
+            if (command == null) {
+                helper.fail("Missing operator command /" + alias, BlockPos.ZERO);
+                return;
+            }
+            for (String child : new String[]{"status", "checkpoint", "apply", "apply-all-modded"}) {
+                if (command.getChild(child) == null) {
+                    helper.fail("Missing /" + alias + " " + child, BlockPos.ZERO);
+                    return;
+                }
+            }
+        }
+        helper.succeed();
+    }
 }

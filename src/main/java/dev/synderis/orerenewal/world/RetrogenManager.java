@@ -25,9 +25,11 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -119,7 +121,10 @@ public final class RetrogenManager {
         loaded.add(key);
 
         if (event.isNewChunk()) {
-            chunk.setData(ModAttachments.CHUNK_REVISION, NEW_CHUNK_SENTINEL);
+            int generatedRevision = profilesReady
+                    ? OreProfileSavedData.get(level).revision()
+                    : NEW_CHUNK_SENTINEL;
+            chunk.setData(ModAttachments.CHUNK_REVISION, generatedRevision);
             chunk.setUnsaved(true);
         } else if (!profilesReady) {
             existingChunkLoadedBeforeProfiles = true;
@@ -148,28 +153,39 @@ public final class RetrogenManager {
         if (budget == 0) {
             return;
         }
+        queue.beginTick();
         for (int i = 0; i < budget; i++) {
             ChunkKey key = queue.poll();
             if (key == null) {
                 break;
             }
-            process(event.getServer(), key);
+            RetrogenAttempt.Result result;
+            try {
+                result = process(event.getServer(), key);
+            } catch (RuntimeException exception) {
+                ChunkPos failedPos = new ChunkPos(key.position());
+                OreRenewal.LOGGER.error(
+                        "Failed to process chunk [{}, {}] in {}; retrying on a later tick",
+                        failedPos.x, failedPos.z,
+                        key.dimension().location(), exception);
+                result = RetrogenAttempt.Result.RETRY_NEXT_TICK;
+            }
+            if (result == RetrogenAttempt.Result.RETRY_NEXT_TICK) {
+                queue.retryNextTick(key);
+            }
         }
     }
 
-    private void process(MinecraftServer server, ChunkKey key) {
+    private RetrogenAttempt.Result process(MinecraftServer server, ChunkKey key) {
         ServerLevel level = server.getLevel(key.dimension());
         if (level == null || !loaded.contains(key)) {
-            return;
+            return RetrogenAttempt.Result.DONE;
         }
 
         ChunkPos pos = new ChunkPos(key.position());
-        if (!hasLoadedNeighborhood(key)) {
-            return;
-        }
-        ChunkAccess access = level.getChunkSource().getChunk(pos.x, pos.z, ChunkStatus.FULL, false);
-        if (!(access instanceof LevelChunk chunk)) {
-            return;
+        ChunkAccess centerAccess = level.getChunkSource().getChunk(pos.x, pos.z, ChunkStatus.FULL, false);
+        if (!(centerAccess instanceof LevelChunk chunk)) {
+            return RetrogenAttempt.Result.RETRY_NEXT_TICK;
         }
 
         OreProfileSavedData profile = OreProfileSavedData.get(level);
@@ -179,10 +195,17 @@ public final class RetrogenManager {
 
         if (completedRevision == NEW_CHUNK_SENTINEL) {
             markComplete(chunk, profile.revision());
-            return;
+            return RetrogenAttempt.Result.DONE;
         }
         if (completedRevision >= profile.revision()) {
-            return;
+            return RetrogenAttempt.Result.DONE;
+        }
+        if (!hasLoadedNeighborhood(key)) {
+            return RetrogenAttempt.Result.DONE;
+        }
+        FullNeighborhood neighborhood = getFullNeighborhood(level, pos);
+        if (neighborhood == null) {
+            return RetrogenAttempt.Result.RETRY_NEXT_TICK;
         }
 
         Map<ResourceLocation, Integer> available = currentFeatures.getOrDefault(level.dimension(), Map.of());
@@ -190,17 +213,19 @@ public final class RetrogenManager {
         pending.keySet().retainAll(available.keySet());
 
         if (!pending.isEmpty()) {
-            primeWorldgenHeightmaps(level, chunk.getPos());
-        }
-        for (Map.Entry<ResourceLocation, Boolean> migration : pending.entrySet()) {
-            ResourceLocation featureId = migration.getKey();
-            OptionalInt step = OreFeatureDiscovery.findStepInChunk(chunk, featureId);
-            if (step.isPresent()) {
-                runFeature(level, chunk, featureId, step.getAsInt(), migration.getValue());
-            }
+            primeWorldgenHeightmaps(neighborhood.chunks());
         }
 
-        markComplete(chunk, profile.revision());
+        RetrogenAttempt.Result result = RetrogenAttempt.runAndCommit(pending.entrySet(), migration -> {
+            ResourceLocation featureId = migration.getKey();
+            OptionalInt step = OreFeatureDiscovery.findStepInChunk(chunk, featureId);
+            return step.isEmpty()
+                    || runFeature(level, chunk, featureId, step.getAsInt(), migration.getValue());
+        }, () -> markComplete(chunk, profile.revision()));
+        if (result == RetrogenAttempt.Result.RETRY_NEXT_TICK) {
+            return result;
+        }
+
         long processed = processedChunks.incrementAndGet();
         int logInterval = OreRenewalConfig.LOG_EVERY_N_CHUNKS.get();
         if (logInterval > 0 && processed % logInterval == 0) {
@@ -209,9 +234,10 @@ public final class RetrogenManager {
                     processed, featureRuns.get(), successfulPlacements.get(), skippedExistingFeatures.get(),
                     failedFeatureRuns.get(), queue.size());
         }
+        return RetrogenAttempt.Result.DONE;
     }
 
-    private void runFeature(
+    private boolean runFeature(
             ServerLevel level,
             LevelChunk chunk,
             ResourceLocation featureId,
@@ -223,12 +249,12 @@ public final class RetrogenManager {
         Holder<PlacedFeature> holder = registry.getHolder(key).orElse(null);
         if (holder == null) {
             OreRenewal.LOGGER.warn("Queued placed feature {} no longer exists; skipping it", featureId);
-            return;
+            return true;
         }
 
         if (skipIfPresent && OreFeatureDiscovery.hasProducedOreBlock(chunk, holder.value())) {
             skippedExistingFeatures.incrementAndGet();
-            return;
+            return true;
         }
 
         ChunkPos chunkPos = chunk.getPos();
@@ -244,24 +270,37 @@ public final class RetrogenManager {
             if (placed) {
                 successfulPlacements.incrementAndGet();
             }
+            return true;
         } catch (RuntimeException exception) {
             failedFeatureRuns.incrementAndGet();
             OreRenewal.LOGGER.error(
                     "Failed to apply placed feature {} to chunk [{}, {}] in {}",
                     featureId, chunkPos.x, chunkPos.z, level.dimension().location(), exception);
+            return false;
         }
     }
 
-    private static void primeWorldgenHeightmaps(ServerLevel level, ChunkPos center) {
+    private static FullNeighborhood getFullNeighborhood(ServerLevel level, ChunkPos center) {
+        List<LevelChunk> chunks = new ArrayList<>(9);
+        LevelChunk centerChunk = null;
         for (int offsetX = -1; offsetX <= 1; offsetX++) {
             for (int offsetZ = -1; offsetZ <= 1; offsetZ++) {
                 ChunkAccess access = level.getChunkSource().getChunk(
                         center.x + offsetX, center.z + offsetZ, ChunkStatus.FULL, false);
-                if (access instanceof LevelChunk chunk) {
-                    primeWorldgenHeightmaps(chunk);
+                if (!(access instanceof LevelChunk chunk)) {
+                    return null;
+                }
+                chunks.add(chunk);
+                if (offsetX == 0 && offsetZ == 0) {
+                    centerChunk = chunk;
                 }
             }
         }
+        return new FullNeighborhood(centerChunk, chunks);
+    }
+
+    private static void primeWorldgenHeightmaps(List<LevelChunk> chunks) {
+        chunks.forEach(RetrogenManager::primeWorldgenHeightmaps);
     }
 
     private static void primeWorldgenHeightmaps(LevelChunk chunk) {
@@ -403,6 +442,9 @@ public final class RetrogenManager {
     }
 
     private record ChunkKey(ResourceKey<Level> dimension, long position) {
+    }
+
+    private record FullNeighborhood(LevelChunk center, List<LevelChunk> chunks) {
     }
 
     public record LevelStatus(ResourceLocation dimension, int revision, int knownFeatures, int migrations) {

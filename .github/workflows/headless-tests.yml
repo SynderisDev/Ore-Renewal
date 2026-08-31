@@ -42,7 +42,7 @@ jobs:
 
       - name: Run persisted-world lifecycle scenarios
         timeout-minutes: 25
-        run: ./gradlew --no-daemon --stacktrace lifecycleGameTest
+        run: ./gradlew --no-daemon --no-parallel --stacktrace lifecycleGameTest
 
       - name: Upload test diagnostics
         if: always()

@@ -1,0 +1,155 @@
+name: Release candidate gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Build a candidate, or approve one after manual playtesting
+        required: true
+        type: choice
+        options:
+          - build_candidate
+          - approve_playtested_candidate
+      candidate_run_id:
+        description: Candidate workflow run ID (approval only)
+        required: false
+        type: string
+      candidate_commit:
+        description: Full 40-character candidate commit SHA (approval only)
+        required: false
+        type: string
+      manual_playtest_passed:
+        description: I manually tested the downloaded candidate JAR and approve this exact build
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  candidate:
+    name: Build exact playtest candidate
+    if: inputs.action == 'build_candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Require main branch
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Release candidates must be built from main, not $GITHUB_REF" >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run complete client-free verification
+        run: ./gradlew --no-daemon --no-parallel --stacktrace build headlessCi
+
+      - name: Package exact candidate and provenance
+        run: |
+          version="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          candidate="build/libs/ore_renewal-${version}.jar"
+          if [[ -z "$version" || ! -f "$candidate" ]]; then
+            echo "Expected exactly $candidate" >&2
+            exit 1
+          fi
+
+          mkdir -p build/release-candidate
+          cp "$candidate" build/release-candidate/
+          (
+            cd build/release-candidate
+            sha256sum "$(basename "$candidate")" > SHA256SUMS
+          )
+          {
+            echo "status=PLAYTEST_REQUIRED"
+            echo "commit=$GITHUB_SHA"
+            echo "version=$version"
+            echo "candidate_run_id=$GITHUB_RUN_ID"
+            echo "candidate_run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > build/release-candidate/CANDIDATE.txt
+
+      - name: Upload candidate for manual playtest
+        uses: actions/upload-artifact@v7
+        with:
+          name: ore-renewal-playtest-${{ github.sha }}
+          if-no-files-found: error
+          path: build/release-candidate/
+
+  signoff:
+    name: Record manual playtest sign-off
+    if: inputs.action == 'approve_playtested_candidate'
+    runs-on: ubuntu-latest
+    environment: manual-playtest
+
+    steps:
+      - name: Validate explicit approval inputs
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          MANUAL_PLAYTEST_PASSED: ${{ inputs.manual_playtest_passed }}
+        run: |
+          if [[ "$GITHUB_ACTOR" != "SynderisDev" ]]; then
+            echo "Only SynderisDev can record the required manual playtest approval" >&2
+            exit 1
+          fi
+          if [[ "$MANUAL_PLAYTEST_PASSED" != "true" ]]; then
+            echo "Manual playtest approval was not confirmed" >&2
+            exit 1
+          fi
+          if [[ ! "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "A numeric candidate workflow run ID is required" >&2
+            exit 1
+          fi
+          if [[ ! "$CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "A full lowercase 40-character commit SHA is required" >&2
+            exit 1
+          fi
+
+      - name: Download the exact tested candidate
+        uses: actions/download-artifact@v8
+        with:
+          name: ore-renewal-playtest-${{ inputs.candidate_commit }}
+          path: approved-release-candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+
+      - name: Verify candidate identity and checksum
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          grep -Fx "status=PLAYTEST_REQUIRED" approved-release-candidate/CANDIDATE.txt
+          grep -Fx "commit=$CANDIDATE_COMMIT" approved-release-candidate/CANDIDATE.txt
+          grep -Fx "candidate_run_id=$CANDIDATE_RUN_ID" approved-release-candidate/CANDIDATE.txt
+          (
+            cd approved-release-candidate
+            sha256sum --check SHA256SUMS
+          )
+          {
+            echo "status=MANUAL_PLAYTEST_APPROVED"
+            echo "commit=$CANDIDATE_COMMIT"
+            echo "candidate_run_id=$CANDIDATE_RUN_ID"
+            echo "approval_workflow_actor=$GITHUB_ACTOR"
+            echo "approval_run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "approved_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > approved-release-candidate/MANUAL_PLAYTEST_APPROVED.txt
+
+      - name: Upload approved, byte-identical release candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: ore-renewal-approved-${{ inputs.candidate_commit }}
+          if-no-files-found: error
+          path: approved-release-candidate/
