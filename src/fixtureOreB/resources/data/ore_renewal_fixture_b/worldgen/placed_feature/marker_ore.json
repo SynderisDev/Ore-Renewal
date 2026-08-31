@@ -19,6 +19,9 @@
           "absolute": 40
         }
       }
+    },
+    {
+      "type": "minecraft:biome"
     }
   ]
 }
