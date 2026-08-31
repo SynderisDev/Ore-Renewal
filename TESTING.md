@@ -9,6 +9,9 @@ Minecraft client:
 - `./gradlew runGameTestServer` starts NeoForge's dedicated GameTest server,
   loads Ore Renewal against real registries and chunks, runs all required game
   tests, and exits non-zero if a required test fails.
+- `./gradlew lifecycleGameTest` starts a sequence of dedicated GameTest server
+  processes. Each scenario reuses its saved world while changing the loaded mod
+  set between restarts.
 
 GitHub Actions runs both commands on Java 21 for every pull request and for
 pushes to `main` and `fix/**` branches. The GameTest sources live in the
@@ -20,6 +23,20 @@ generation settings, resolves their generation step in a real chunk, and that
 the chunk-load handler respects NeoForge's new-chunk flag when applying the
 exclusion sentinel. Each GameTest starts with a fresh world directory under
 `build/run-gametest`.
+
+The lifecycle suite covers these install orders:
+
+| Scenario | Real server phases | Core assertions |
+| --- | --- | --- |
+| Fresh world | Ore Renewal -> fixture A -> new post-mod chunk -> restart | Existing chunks receive A once; chunks generated with A are not retro-generated; marker counts persist across restart. |
+| Existing world | Vanilla -> Ore Renewal -> fixture A -> restart | A legacy chunk with no attachment receives A once after the later feature revision and is unchanged on restart. |
+| Established modded world | Vanilla -> fixture A -> fixture B -> Ore Renewal -> restart | Pre-A chunks receive A+B; A-era chunks preserve A and receive B; A+B-era chunks preserve both; all cohorts remain unchanged on restart. |
+
+Fixture A and B are independent low-code data-pack mods with distinct standard
+ore features. The phases run in separate JVMs against the same on-disk world,
+so profile SavedData, chunk attachments, new-chunk exclusion, historical
+presence checks, and restart idempotency are exercised through real persistence.
+All lifecycle worlds and diagnostics are kept under `build/run-lifecycle`.
 
 Tested on a dedicated NeoForge 21.1.233 development server running Minecraft 1.21.1.
 

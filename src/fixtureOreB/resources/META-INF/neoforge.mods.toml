@@ -1,0 +1,23 @@
+modLoader="lowcodefml"
+loaderVersion="[1,)"
+license="CC0-1.0"
+
+[[mods]]
+modId="ore_renewal_fixture_b"
+version="1.0.0"
+displayName="Ore Renewal Fixture B"
+description='''Headless lifecycle-test ore fixture B.'''
+
+[[dependencies."ore_renewal_fixture_b"]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.233,21.2)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies."ore_renewal_fixture_b"]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.21.2)"
+ordering="NONE"
+side="BOTH"
