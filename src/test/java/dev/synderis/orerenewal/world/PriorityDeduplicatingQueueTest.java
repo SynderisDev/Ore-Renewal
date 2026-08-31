@@ -29,4 +29,20 @@ class PriorityDeduplicatingQueueTest {
         assertEquals("chunk", queue.poll());
         assertNull(queue.poll());
     }
+
+    @Test
+    void repeatedPriorityOffersStayPhysicallyDeduplicated() {
+        PriorityDeduplicatingQueue<String> queue = new PriorityDeduplicatingQueue<>();
+        queue.offer("chunk");
+
+        for (int i = 0; i < 100_000; i++) {
+            queue.offerPriority("chunk");
+        }
+
+        assertEquals(1, queue.size());
+        assertEquals(1, queue.storageSize());
+        assertEquals("chunk", queue.poll());
+        assertEquals(0, queue.storageSize());
+        assertNull(queue.poll());
+    }
 }

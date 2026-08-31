@@ -1,6 +1,7 @@
 package dev.synderis.orerenewal.world;
 
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -60,5 +61,37 @@ class OreProfileSavedDataTest {
         data.forceHistoricalMigration(Set.of(COPPER, TIN));
 
         assertEquals(Map.of(COPPER, true, TIN, false), data.pendingFeaturesAfter(0));
+    }
+
+    @Test
+    void profileRoundTripPreservesRevisionsAndHistoricalPolicy() {
+        OreProfileSavedData original = new OreProfileSavedData();
+        original.reconcile(Set.of(COPPER));
+        original.reconcile(Set.of(COPPER, TIN));
+        original.forceHistoricalMigration(Set.of(LEAD));
+
+        CompoundTag encoded = original.save(new CompoundTag(), null);
+        OreProfileSavedData restored = OreProfileSavedData.load(encoded, null);
+
+        assertEquals(2, restored.revision());
+        assertEquals(3, restored.knownFeatureCount());
+        assertEquals(2, restored.migrationCount());
+        assertEquals(Map.of(TIN, false, LEAD, true), restored.pendingFeaturesAfter(0));
+        assertEquals(Map.of(LEAD, true), restored.pendingFeaturesAfter(1));
+        assertTrue(restored.pendingFeaturesAfter(2).isEmpty());
+    }
+
+    @Test
+    void removingAndReaddingAFeatureCreatesANewExactMigration() {
+        OreProfileSavedData data = new OreProfileSavedData();
+        data.reconcile(Set.of(COPPER, TIN));
+
+        OreProfileSavedData.ReconcileResult removal = data.reconcile(Set.of(COPPER));
+        OreProfileSavedData.ReconcileResult readdition = data.reconcile(Set.of(COPPER, TIN));
+
+        assertEquals(Set.of(TIN), removal.removed());
+        assertEquals(Set.of(TIN), readdition.added());
+        assertEquals(1, data.revision());
+        assertEquals(Map.of(TIN, false), data.pendingFeaturesAfter(0));
     }
 }

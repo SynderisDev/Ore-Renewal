@@ -86,13 +86,17 @@ public final class LifecycleScenarioGameTests {
         ServerLevel level = helper.getLevel();
         prepareCohort(level, A_EXISTING);
         assertMarkerCounts(helper, level, A_EXISTING, 0, 0);
-        succeedAfterSettling(helper, () -> assertMarkerCounts(helper, level, A_EXISTING, 0, 0));
+        succeedAfterSettling(helper, () -> {
+            assertMarkerCounts(helper, level, A_EXISTING, 0, 0);
+            ScenarioState.get(level).putInt("a_phase", 0);
+        });
     }
 
     private static void scenarioAAddFixture(GameTestHelper helper) {
         assertMods(helper, true, true, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "a_phase", 0);
         loadNeighborhood(level, A_EXISTING);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, A_EXISTING, MARKER_A);
@@ -100,6 +104,8 @@ public final class LifecycleScenarioGameTests {
             helper.assertTrue(markerCount(level, A_EXISTING, MARKER_B) == 0,
                     "Fixture B unexpectedly appeared before it was installed");
             ScenarioState.get(level).putInt("a_existing_a", countA);
+            ScenarioState.get(level).putInt("a_phase", 1);
+            saveWorld(level);
         });
     }
 
@@ -107,24 +113,30 @@ public final class LifecycleScenarioGameTests {
         assertMods(helper, true, true, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "a_phase", 1);
         prepareCohort(level, A_POST_MOD);
         placeFixture(helper, level, A_POST_MOD, FEATURE_A, 101L);
         int initialCount = markerCount(level, A_POST_MOD, MARKER_A);
         helper.assertTrue(initialCount > 0, "Fixture A did not generate in the post-mod chunk");
         ScenarioState.get(level).putInt("a_post_a", initialCount);
-        succeedAfterSettling(helper, () -> assertMarkerCounts(helper, level, A_POST_MOD, initialCount, 0));
+        succeedAfterSettling(helper, () -> {
+            assertMarkerCounts(helper, level, A_POST_MOD, initialCount, 0);
+            ScenarioState.get(level).putInt("a_phase", 2);
+        });
     }
 
     private static void scenarioARestart(GameTestHelper helper) {
         assertMods(helper, true, true, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "a_phase", 2);
         loadNeighborhood(level, A_EXISTING);
         loadNeighborhood(level, A_POST_MOD);
         ScenarioState state = ScenarioState.get(level);
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, A_EXISTING, state.requireInt("a_existing_a"), 0);
             assertMarkerCounts(helper, level, A_POST_MOD, state.requireInt("a_post_a"), 0);
+            state.putInt("a_phase", 3);
             releaseNeighborhoods(level, A_EXISTING, A_POST_MOD);
         });
     }
@@ -132,24 +144,29 @@ public final class LifecycleScenarioGameTests {
     private static void scenarioBExistingWorld(GameTestHelper helper) {
         assertMods(helper, false, false, false);
         ServerLevel level = helper.getLevel();
-        level.getLevelData().setGameTime(2_400L);
         prepareCohort(level, B_EXISTING);
         assertMarkerCounts(helper, level, B_EXISTING, 0, 0);
-        helper.succeed();
+        ScenarioState.get(level).putInt("b_phase", 0);
+        saveAndSucceed(helper, level);
     }
 
     private static void scenarioBAddOreRenewal(GameTestHelper helper) {
         assertMods(helper, true, false, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "b_phase", 0);
         loadNeighborhood(level, B_EXISTING);
-        succeedAfterSettling(helper, () -> assertMarkerCounts(helper, level, B_EXISTING, 0, 0));
+        succeedAfterSettling(helper, () -> {
+            assertMarkerCounts(helper, level, B_EXISTING, 0, 0);
+            ScenarioState.get(level).putInt("b_phase", 1);
+        });
     }
 
     private static void scenarioBAddFixture(GameTestHelper helper) {
         assertMods(helper, true, true, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "b_phase", 1);
         loadNeighborhood(level, B_EXISTING);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, B_EXISTING, MARKER_A);
@@ -157,6 +174,8 @@ public final class LifecycleScenarioGameTests {
             helper.assertTrue(markerCount(level, B_EXISTING, MARKER_B) == 0,
                     "Fixture B unexpectedly appeared before it was installed");
             ScenarioState.get(level).putInt("b_existing_a", countA);
+            ScenarioState.get(level).putInt("b_phase", 2);
+            saveWorld(level);
         });
     }
 
@@ -164,10 +183,12 @@ public final class LifecycleScenarioGameTests {
         assertMods(helper, true, true, false);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "b_phase", 2);
         loadNeighborhood(level, B_EXISTING);
         int expectedA = ScenarioState.get(level).requireInt("b_existing_a");
         succeedAfterSettling(helper, () -> {
             assertMarkerCounts(helper, level, B_EXISTING, expectedA, 0);
+            ScenarioState.get(level).putInt("b_phase", 3);
             releaseNeighborhoods(level, B_EXISTING);
         });
     }
@@ -175,15 +196,16 @@ public final class LifecycleScenarioGameTests {
     private static void scenarioCExistingWorld(GameTestHelper helper) {
         assertMods(helper, false, false, false);
         ServerLevel level = helper.getLevel();
-        level.getLevelData().setGameTime(2_400L);
         prepareCohort(level, C_BEFORE_A);
         assertMarkerCounts(helper, level, C_BEFORE_A, 0, 0);
-        helper.succeed();
+        ScenarioState.get(level).putInt("c_phase", 0);
+        saveAndSucceed(helper, level);
     }
 
     private static void scenarioCAddFixtureA(GameTestHelper helper) {
         assertMods(helper, false, true, false);
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "c_phase", 0);
         prepareCohort(level, C_WITH_A);
         placeFixture(helper, level, C_WITH_A, FEATURE_A, 201L);
         resetTargetBands(level, C_WITH_A);
@@ -193,12 +215,14 @@ public final class LifecycleScenarioGameTests {
         helper.assertTrue(markerCount(level, C_WITH_A, MARKER_B) == 0,
                 "Fixture B appeared before it was installed");
         ScenarioState.get(level).putInt("c_with_a_a_before", countA);
-        helper.succeed();
+        ScenarioState.get(level).putInt("c_phase", 1);
+        saveAndSucceed(helper, level);
     }
 
     private static void scenarioCAddFixtureB(GameTestHelper helper) {
         assertMods(helper, false, true, true);
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "c_phase", 1);
         prepareCohort(level, C_WITH_A_B);
         placeFixture(helper, level, C_WITH_A_B, FEATURE_A, 301L);
         placeFixture(helper, level, C_WITH_A_B, FEATURE_B, 302L);
@@ -212,13 +236,15 @@ public final class LifecycleScenarioGameTests {
         ScenarioState state = ScenarioState.get(level);
         state.putInt("c_with_ab_a_before", countA);
         state.putInt("c_with_ab_b_before", countB);
-        helper.succeed();
+        state.putInt("c_phase", 2);
+        saveAndSucceed(helper, level);
     }
 
     private static void scenarioCAddOreRenewal(GameTestHelper helper) {
         assertMods(helper, true, true, true);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "c_phase", 2);
         loadNeighborhood(level, C_BEFORE_A);
         loadNeighborhood(level, C_WITH_A);
         loadNeighborhood(level, C_WITH_A_B);
@@ -248,6 +274,8 @@ public final class LifecycleScenarioGameTests {
             state.putInt("c_with_a_b_after", withAB);
             state.putInt("c_with_ab_a_after", withABA);
             state.putInt("c_with_ab_b_after", withABB);
+            state.putInt("c_phase", 3);
+            saveWorld(level);
         });
     }
 
@@ -255,6 +283,7 @@ public final class LifecycleScenarioGameTests {
         assertMods(helper, true, true, true);
         accelerateRetrogen();
         ServerLevel level = helper.getLevel();
+        requirePhase(level, "c_phase", 3);
         loadNeighborhood(level, C_BEFORE_A);
         loadNeighborhood(level, C_WITH_A);
         loadNeighborhood(level, C_WITH_A_B);
@@ -267,6 +296,7 @@ public final class LifecycleScenarioGameTests {
                     state.requireInt("c_with_a_a_after"), state.requireInt("c_with_a_b_after"));
             assertMarkerCounts(helper, level, C_WITH_A_B,
                     state.requireInt("c_with_ab_a_after"), state.requireInt("c_with_ab_b_after"));
+            state.putInt("c_phase", 4);
             releaseNeighborhoods(level, C_BEFORE_A, C_WITH_A, C_WITH_A_B);
         });
     }
@@ -280,6 +310,14 @@ public final class LifecycleScenarioGameTests {
         assertMod(helper, ORE_RENEWAL, oreRenewal);
         assertMod(helper, FIXTURE_A, fixtureA);
         assertMod(helper, FIXTURE_B, fixtureB);
+    }
+
+    private static void requirePhase(ServerLevel level, String key, int expected) {
+        int actual = ScenarioState.get(level).requireInt(key);
+        if (actual != expected) {
+            throw new GameTestAssertException(
+                    "Expected persisted " + key + "=" + expected + " but found " + actual);
+        }
     }
 
     private static void assertMod(GameTestHelper helper, String modId, boolean expected) {
@@ -428,7 +466,16 @@ public final class LifecycleScenarioGameTests {
     private static void succeedAfterSettling(GameTestHelper helper, Runnable assertions) {
         helper.runAtTickTime(SETTLE_TICKS, () -> {
             assertions.run();
-            helper.succeed();
+            saveAndSucceed(helper, helper.getLevel());
         });
+    }
+
+    private static void saveAndSucceed(GameTestHelper helper, ServerLevel level) {
+        saveWorld(level);
+        helper.succeed();
+    }
+
+    private static void saveWorld(ServerLevel level) {
+        level.getServer().saveEverything(false, true, true);
     }
 }

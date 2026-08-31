@@ -1,47 +1,49 @@
 package dev.synderis.orerenewal.world;
 
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 final class PriorityDeduplicatingQueue<T> {
-    private final ConcurrentLinkedQueue<T> priority = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<T> normal = new ConcurrentLinkedQueue<>();
-    private final Set<T> scheduled = ConcurrentHashMap.newKeySet();
+    private final Set<T> priority = new LinkedHashSet<>();
+    private final Set<T> normal = new LinkedHashSet<>();
 
-    void offer(T value) {
-        if (scheduled.add(value)) {
+    synchronized void offer(T value) {
+        if (!priority.contains(value)) {
             normal.add(value);
         }
     }
 
-    void offerPriority(T value) {
-        scheduled.add(value);
+    synchronized void offerPriority(T value) {
+        normal.remove(value);
         priority.add(value);
     }
 
-    T poll() {
-        T value;
-        while ((value = priority.poll()) != null) {
-            if (scheduled.remove(value)) {
-                return value;
-            }
-        }
-        while ((value = normal.poll()) != null) {
-            if (scheduled.remove(value)) {
-                return value;
-            }
-        }
-        return null;
+    synchronized T poll() {
+        T value = removeFirst(priority);
+        return value != null ? value : removeFirst(normal);
     }
 
-    int size() {
-        return scheduled.size();
+    synchronized int size() {
+        return priority.size() + normal.size();
     }
 
-    void clear() {
+    synchronized int storageSize() {
+        return priority.size() + normal.size();
+    }
+
+    synchronized void clear() {
         priority.clear();
         normal.clear();
-        scheduled.clear();
+    }
+
+    private static <T> T removeFirst(Set<T> values) {
+        Iterator<T> iterator = values.iterator();
+        if (!iterator.hasNext()) {
+            return null;
+        }
+        T value = iterator.next();
+        iterator.remove();
+        return value;
     }
 }
