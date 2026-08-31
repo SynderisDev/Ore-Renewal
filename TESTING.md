@@ -41,8 +41,16 @@ The lifecycle suite covers these install orders:
 
 Fixture A and B are independent low-code data-pack mods. Fixture A uses the
 standard `ORE` generator and fixture B uses `SCATTERED_ORE`. Each targets a
-different artificial substrate confined to the safe interior of the test
-chunk, which prevents neighboring feature runs from contaminating assertions.
+different artificial substrate, while assertions count only the safe interior
+of the test chunk so neighboring feature runs cannot contaminate them.
+The substrates occupy separate halves of a bottom-relative stratum, keeping
+both fixtures below even an empty world's world-generation heightmap. Their
+test-only biome tags cover normal overworld biomes plus a void fallback, and
+every phase asserts that the fixture is present in the actual candidate biome
+at the placement height. The harness re-primes
+world-generation heightmaps after installing its artificial ore strata so the
+standard generators exercise those targets rather than rejecting positions
+above the intentionally empty GameTest terrain.
 The phases run in separate JVMs against the same on-disk world,
 so profile SavedData, chunk attachments, new-chunk exclusion, historical
 presence checks, and restart idempotency are exercised through real persistence.

@@ -16,8 +16,10 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
@@ -32,7 +34,10 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 @GameTestHolder("ore_renewal")
@@ -58,10 +63,9 @@ public final class LifecycleScenarioGameTests {
     private static final ChunkPos C_WITH_A = new ChunkPos(84, 80);
     private static final ChunkPos C_WITH_A_B = new ChunkPos(88, 80);
 
-    private static final int TARGET_A_MIN_Y = 8;
-    private static final int TARGET_A_MAX_Y = 24;
-    private static final int TARGET_B_MIN_Y = 32;
-    private static final int TARGET_B_MAX_Y = 48;
+    private static final int TARGET_MIN_OFFSET = 0;
+    private static final int TARGET_MAX_OFFSET = 12;
+    private static final int FIXTURE_PLACEMENT_OFFSET = 3;
     private static final int PRESENCE_A_Y = 70;
     private static final int PRESENCE_B_Y = 71;
     private static final int SET_BLOCK_FLAGS = 2;
@@ -116,6 +120,7 @@ public final class LifecycleScenarioGameTests {
         ServerLevel level = helper.getLevel();
         requirePhase(level, "a_phase", 0);
         loadNeighborhood(level, A_EXISTING);
+        assertFixtureRegisteredForChunk(helper, level, A_EXISTING, FEATURE_A);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, A_EXISTING, MARKER_A);
             helper.assertTrue(countA > 0,
@@ -154,6 +159,8 @@ public final class LifecycleScenarioGameTests {
         requirePhase(level, "a_phase", 2);
         persistNeighborhood(level, A_EXISTING);
         persistNeighborhood(level, A_POST_MOD);
+        assertFixtureRegisteredForChunk(helper, level, A_EXISTING, FEATURE_B);
+        assertFixtureRegisteredForChunk(helper, level, A_POST_MOD, FEATURE_B);
         ScenarioState state = ScenarioState.get(level);
         int expectedExistingA = state.requireInt("a_existing_a");
         int expectedPostA = state.requireInt("a_post_a");
@@ -224,6 +231,7 @@ public final class LifecycleScenarioGameTests {
         ServerLevel level = helper.getLevel();
         requirePhase(level, "b_phase", 1);
         loadNeighborhood(level, B_EXISTING);
+        assertFixtureRegisteredForChunk(helper, level, B_EXISTING, FEATURE_A);
         helper.succeedWhen(() -> {
             int countA = markerCount(level, B_EXISTING, MARKER_A);
             helper.assertTrue(countA > 0, "Fixture A was not retro-generated into the legacy chunk");
@@ -306,6 +314,10 @@ public final class LifecycleScenarioGameTests {
         loadNeighborhood(level, C_BEFORE_A);
         loadNeighborhood(level, C_WITH_A);
         loadNeighborhood(level, C_WITH_A_B);
+        for (ChunkPos cohort : List.of(C_BEFORE_A, C_WITH_A, C_WITH_A_B)) {
+            assertFixtureRegisteredForChunk(helper, level, cohort, FEATURE_A);
+            assertFixtureRegisteredForChunk(helper, level, cohort, FEATURE_B);
+        }
         ScenarioState state = ScenarioState.get(level);
 
         helper.succeedWhen(() -> {
@@ -427,12 +439,17 @@ public final class LifecycleScenarioGameTests {
     private static void resetTargetBands(ServerLevel level, ChunkPos center) {
         LevelChunk chunk = level.getChunk(center.x, center.z);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int targetMinY = level.getMinBuildHeight() + TARGET_MIN_OFFSET;
+        int targetMaxY = level.getMinBuildHeight() + TARGET_MAX_OFFSET;
         for (int x = center.getMinBlockX(); x <= center.getMaxBlockX(); x++) {
             for (int z = center.getMinBlockZ(); z <= center.getMaxBlockZ(); z++) {
-                fillTarget(level, cursor, x, z, TARGET_A_MIN_Y, TARGET_A_MAX_Y, TARGET_A);
-                fillTarget(level, cursor, x, z, TARGET_B_MIN_Y, TARGET_B_MAX_Y, TARGET_B);
+                Block target = x - center.getMinBlockX() < 8 ? TARGET_A : TARGET_B;
+                fillTarget(level, cursor, x, z, targetMinY, targetMaxY, target);
             }
         }
+        Heightmap.primeHeightmaps(chunk, EnumSet.of(
+                Heightmap.Types.OCEAN_FLOOR_WG,
+                Heightmap.Types.WORLD_SURFACE_WG));
         chunk.setUnsaved(true);
     }
 
@@ -498,6 +515,7 @@ public final class LifecycleScenarioGameTests {
             ResourceLocation featureId,
             long seed
     ) {
+        assertFixtureRegisteredForChunk(helper, level, center, featureId);
         Registry<PlacedFeature> registry = level.registryAccess().registryOrThrow(Registries.PLACED_FEATURE);
         ResourceKey<PlacedFeature> key = ResourceKey.create(Registries.PLACED_FEATURE, featureId);
         Holder<PlacedFeature> holder = registry.getHolder(key).orElseThrow(() ->
@@ -511,6 +529,49 @@ public final class LifecycleScenarioGameTests {
                 level, level.getChunkSource().getGenerator(), random, origin);
         helper.assertTrue(placed,
                 "Fixture placed feature returned false: " + featureId + "; controlled targets=" + targetCount);
+    }
+
+    private static void assertFixtureRegisteredForChunk(
+            GameTestHelper helper,
+            ServerLevel level,
+            ChunkPos pos,
+            ResourceLocation featureId
+    ) {
+        Set<Holder<Biome>> biomes = new LinkedHashSet<>();
+        int placementY = level.getMinBuildHeight() + FIXTURE_PLACEMENT_OFFSET;
+        for (int x = pos.getMinBlockX(); x <= pos.getMaxBlockX(); x++) {
+            for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
+                biomes.add(level.getBiome(new BlockPos(x, placementY, z)));
+            }
+        }
+
+        List<String> missingBiomeIds = new java.util.ArrayList<>();
+        for (Holder<Biome> biome : biomes) {
+            boolean registered = false;
+            outer:
+            for (var step : biome.value().getGenerationSettings().features()) {
+                for (Holder<PlacedFeature> placedFeature : step) {
+                    if (placedFeature.unwrapKey()
+                            .map(ResourceKey::location)
+                            .filter(featureId::equals)
+                            .isPresent()) {
+                        registered = true;
+                        break outer;
+                    }
+                }
+            }
+            if (!registered) {
+                missingBiomeIds.add(biome.unwrapKey()
+                        .map(ResourceKey::location)
+                        .map(ResourceLocation::toString)
+                        .orElse("<direct>"));
+            }
+        }
+
+        missingBiomeIds.sort(String::compareTo);
+        helper.assertTrue(missingBiomeIds.isEmpty(),
+                "Fixture " + featureId + " is absent at placement Y=" + placementY
+                        + " from chunk " + pos + " biomes " + missingBiomeIds);
     }
 
     private static int markerCount(ServerLevel level, ChunkPos pos, Block marker) {
